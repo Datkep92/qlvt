@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản Lý Thiết Bị Y Tế - BV Ninh Thuận</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="enhanced-devices.css">
+    <link rel="preload" href="https://cdn.jsdelivr.net/npm/chart.js" as="script">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="header-content">
+                <h1>🏥 Quản Lý Thiết Bị Y Tế</h1>
+                <p>Bệnh viện tỉnh Ninh Thuận - Khoa Gây mê hồi sức</p>
+            </div>
+            <div class="user-info">
+                <span id="current-user">Quản trị viên</span>
+                <button id="logout-btn">Đăng xuất</button>
+            </div>
+        </header>
+
+        <!-- Navigation Tabs -->
+        <nav class="tab-navigation">
+            <button class="tab-btn" data-tab="import">Import Excel</button>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Import Tab -->
+            <div id="import" class="tab-content">
+                <div class="tab-header">
+                    <h2>Import từ Excel</h2>
+                </div>
+                
+                <div class="import-container">
+                    <div class="upload-area" id="upload-area">
+                        <input type="file" id="excel-file" accept=".xlsx, .xls" hidden>
+                        <div class="upload-placeholder">
+                            <span>📁 Kéo thả file Excel vào đây hoặc click để chọn</span>
+                            <p>Hỗ trợ định dạng .xlsx, .xls</p>
+                        </div>
+                    </div>
+
+                    <div id="preview-section" class="preview-section" style="display: none;">
+                        <h3>Xem trước dữ liệu</h3>
+                        <div class="table-container">
+                            <table id="preview-table" class="data-table">
+                                <!-- Preview data will be loaded here -->
+                            </table>
+                        </div>
+                        
+                        <div class="import-actions">
+                            <button id="confirm-import" class="btn-primary">Xác nhận Import</button>
+                            <button id="cancel-import" class="btn-secondary">Hủy</button>
+                        </div>
+                    </div>
+
+                    
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+     <script src="database.js"></script>
+    <script src="database-extended.js"></script>
+    <script src="app.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="import.js"></script>
+    <script src="enhanced-devices-core.js"></script>
+    <script src="enhanced-devices-views.js"></script>
+    <script src="enhanced-devices-filters.js"></script>
+    <script src="enhanced-devices-bulk.js"></script>
+    <script src="enhanced-devices-export.js"></script>
+    <script src="enhanced-devices-maintenance.js"></script>
+
+
+</body>
+</html>
