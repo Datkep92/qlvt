@@ -486,13 +486,7 @@ async generateQRWithSelected() {
         });
     }
     
-   // xuatdulieu.js - Phiên bản TẠO QR MỞ TRANG HTML RIÊNG
-
-// ... (phần đầu giữ nguyên) ...
-
-// TẠO URL HIỂN THỊ THÔNG TIN THIẾT BỊ
 createDeviceURL(device) {
-    // Tạo một URL với hash chứa thông tin thiết bị
     const deviceInfo = {
         id: device.id,
         name: device.ten_thiet_bi,
@@ -507,16 +501,16 @@ createDeviceURL(device) {
         note: device.ghi_chu || '',
         serial: device.serial_number || '',
         unit: device.don_vi_tinh || 'cái',
-        manager: device.nhan_vien_ql || ''
+        manager: device.nhan_vien_ql || '',
+        // Thêm thời gian tạo
+        timestamp: new Date().toISOString()
     };
     
-    // Mã hóa thông tin thành JSON và base64
     const jsonString = JSON.stringify(deviceInfo);
     const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
     
-    // Tạo URL mở trang HTML chứa thông tin
-    // Lưu ý: qr-display.html phải cùng thư mục với file hiện tại
-    return `${window.location.origin}${window.location.pathname.replace(/[^/]*$/, '')}qr-display.html?device=${encodeURIComponent(base64Data)}`;
+    // URL GitHub Pages CỦA BẠN
+    return `https://datkep92.github.io/qlvt/qr-display.html#${base64Data}`;
 }
 
 // TẠO TRANG HIỂN THỊ THÔNG TIN KHI QUÉT QR (trang riêng)
