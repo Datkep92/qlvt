@@ -502,14 +502,13 @@ createDeviceURL(device) {
         serial: device.serial_number || '',
         unit: device.don_vi_tinh || 'cái',
         manager: device.nhan_vien_ql || '',
-        // Thêm thời gian tạo
         timestamp: new Date().toISOString()
     };
     
     const jsonString = JSON.stringify(deviceInfo);
     const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
     
-    // URL GitHub Pages CỦA BẠN
+    // URL GitHub Pages của bạn
     return `https://datkep92.github.io/qlvt/qr-display.html#${base64Data}`;
 }
 
