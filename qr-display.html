@@ -72,6 +72,73 @@
     </div>
 
     <script>
+        // THÊM HÀM DEBUG VÀO ĐẦU SCRIPT
+function debugHash() {
+    console.log('=== DEBUG HASH INFO ===');
+    console.log('Full URL:', window.location.href);
+    console.log('Hash:', window.location.hash);
+    console.log('Hash length:', window.location.hash.length);
+    console.log('Hash content:', window.location.hash.substring(1));
+    console.log('========================');
+}
+
+// SỬA HÀM getDeviceDataFromHash
+function getDeviceDataFromHash() {
+    debugHash(); // Thêm dòng này để debug
+    
+    try {
+        const hash = window.location.hash;
+        
+        if (!hash || hash === '#') {
+            console.log('Empty hash, showing welcome page');
+            return null;
+        }
+        
+        // Lấy phần sau dấu #
+        const hashContent = hash.substring(1);
+        console.log('Hash content to decode:', hashContent);
+        
+        if (!hashContent || hashContent.trim() === '') {
+            console.log('Empty hash content');
+            return null;
+        }
+        
+        // Kiểm tra xem có phải base64 không
+        if (hashContent.length < 10) {
+            console.log('Hash too short, not valid base64');
+            return null;
+        }
+        
+        // Thử decode
+        try {
+            // Sử dụng cách decode an toàn
+            const decoded = decodeURIComponent(escape(atob(hashContent)));
+            console.log('Successfully decoded:', decoded.substring(0, 100) + '...');
+            
+            const device = JSON.parse(decoded);
+            console.log('Parsed device:', device);
+            
+            return device;
+            
+        } catch (decodeError) {
+            console.error('Decode error:', decodeError);
+            
+            // Thử decode trực tiếp không qua escape (cho đơn giản)
+            try {
+                const decoded = atob(hashContent);
+                console.log('Direct decode (no escape):', decoded);
+                return JSON.parse(decoded);
+            } catch (simpleError) {
+                console.error('Simple decode also failed:', simpleError);
+                return null;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error in getDeviceDataFromHash:', error);
+        return null;
+    }
+}
         function loadDeviceData() {
             const container = document.getElementById('deviceData');
             const hash = window.location.hash;
