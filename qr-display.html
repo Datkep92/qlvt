@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thông Tin Thiết Bị Y Tế</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.2);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+        
+        .logo {
+            font-size: 40px;
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin: 0;
+            font-size: 24px;
+        }
+        
+        .subtitle {
+            color: #666;
+            font-size: 14px;
+            margin-top: 5px;
+        }
+        
+        .device-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .info-item {
+            display: flex;
+            margin-bottom: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px dashed #ddd;
+        }
+        
+        .info-item:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .info-label {
+            width: 140px;
+            font-weight: bold;
+            color: #555;
+            font-size: 14px;
+        }
+        
+        .info-value {
+            flex: 1;
+            color: #333;
+            font-size: 15px;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        
+        .status-success { background: #d4edda; color: #155724; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        .status-danger { background: #f8d7da; color: #721c24; }
+        
+        .price {
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .footer {
+            text-align: center;
+            margin-top: 25px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            font-size: 12px;
+            color: #777;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 25px;
+            background: #28a745;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 5px;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        
+        .btn:hover {
+            background: #218838;
+        }
+        
+        .btn-print {
+            background: #007bff;
+        }
+        
+        .btn-print:hover {
+            background: #0056b3;
+        }
+        
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+            }
+            
+            .info-item {
+                flex-direction: column;
+            }
+            
+            .info-label {
+                width: 100%;
+                margin-bottom: 5px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">🏥</div>
+            <h1>THÔNG TIN THIẾT BỊ Y TẾ</h1>
+            <div class="subtitle">Bệnh viện Ninh Thuận</div>
+        </div>
+        
+        <div class="warning">
+            <strong>⚠️ Lưu ý:</strong> Trang này chỉ hiển thị thông tin khi quét QR Code hợp lệ từ hệ thống.
+        </div>
+        
+        <div id="deviceData" class="device-info">
+            <div style="text-align: center; padding: 30px;">
+                <div style="font-size: 40px; margin-bottom: 10px;">📱</div>
+                <p>Vui lòng quét QR Code từ hệ thống để xem thông tin thiết bị</p>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>© <span id="currentYear"></span> - Hệ thống Quản lý Thiết bị Y tế</p>
+            <p>Liên hệ: phongcongtacvien@benhviennt.com | ĐT: 0259.3822.222</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+        
+        // Xử lý dữ liệu từ QR Code
+        function parseDeviceFromURL() {
+            const hash = window.location.hash;
+            if (hash.startsWith('#device=')) {
+                try {
+                    const base64Data = hash.substring(8);
+                    const jsonString = decodeURIComponent(atob(base64Data));
+                    const device = JSON.parse(jsonString);
+                    
+                    displayDeviceInfo(device);
+                    
+                    // Xóa hash để không hiển thị lại khi refresh
+                    window.location.hash = '';
+                    
+                } catch (error) {
+                    console.error('Error parsing device data:', error);
+                    showError('Không thể đọc thông tin từ QR Code');
+                }
+            }
+        }
+        
+        function displayDeviceInfo(device) {
+            const statusClass = getStatusClass(device.status);
+            const totalValue = (device.price || 0) * (device.quantity || 1);
+            
+            const html = `
+                <div class="info-item">
+                    <div class="info-label">ID thiết bị:</div>
+                    <div class="info-value">${escapeHtml(device.id)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Tên thiết bị:</div>
+                    <div class="info-value"><strong>${escapeHtml(device.name)}</strong></div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Model:</div>
+                    <div class="info-value">${escapeHtml(device.model)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Nhà sản xuất:</div>
+                    <div class="info-value">${escapeHtml(device.manufacturer)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Năm sản xuất:</div>
+                    <div class="info-value">${device.year}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Số lượng:</div>
+                    <div class="info-value">${device.quantity}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Nguyên giá:</div>
+                    <div class="info-value">${formatCurrency(device.price)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Thành tiền:</div>
+                    <div class="info-value price">${formatCurrency(totalValue)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Tình trạng:</div>
+                    <div class="info-value">
+                        <span class="status-badge status-${statusClass}">${device.status}</span>
+                    </div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Phòng ban:</div>
+                    <div class="info-value">${escapeHtml(device.department)}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Phân loại:</div>
+                    <div class="info-value">${device.category}</div>
+                </div>
+                ${device.note ? `
+                <div class="info-item">
+                    <div class="info-label">Ghi chú:</div>
+                    <div class="info-value">${escapeHtml(device.note)}</div>
+                </div>
+                ` : ''}
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="javascript:window.print()" class="btn btn-print">🖨️ In Thông Tin</a>
+                    <a href="javascript:history.back()" class="btn">↩️ Quay Lại</a>
+                </div>
+            `;
+            
+            document.getElementById('deviceData').innerHTML = html;
+        }
+        
+        function showError(message) {
+            document.getElementById('deviceData').innerHTML = `
+                <div style="text-align: center; padding: 30px; color: #721c24;">
+                    <div style="font-size: 40px; margin-bottom: 10px;">❌</div>
+                    <h3>${message}</h3>
+                    <p>Vui lòng quét lại QR Code hoặc liên hệ quản trị viên</p>
+                </div>
+            `;
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+        
+        function formatCurrency(amount) {
+            if (!amount) return '0 ₫';
+            return new Intl.NumberFormat('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            }).format(amount);
+        }
+        
+        function getStatusClass(status) {
+            const map = {
+                'Đang sử dụng': 'success',
+                'Bảo trì': 'warning', 
+                'Hỏng': 'danger',
+                'Ngừng sử dụng': 'secondary'
+            };
+            return map[status] || 'secondary';
+        }
+        
+        // Chạy khi trang load
+        window.addEventListener('load', parseDeviceFromURL);
+        window.addEventListener('hashchange', parseDeviceFromURL);
+    </script>
+</body>
+</html>

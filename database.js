@@ -27,7 +27,18 @@ class MedicalEquipmentDB {
             };
         });
     }
-
+async checkSerialNumberExists(serialNumber) {
+    await this.ensureInitialized();
+    const transaction = this.db.transaction(['devices'], 'readonly');
+    const store = transaction.objectStore('devices');
+    const index = store.index('serial_number');
+    
+    return new Promise((resolve, reject) => {
+        const request = index.get(serialNumber);
+        request.onsuccess = () => resolve(!!request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
     createAllStores(db) {
         // Xóa tất cả stores cũ nếu có
         const storeNames = ['devices', 'maintenance', 'activities', 'departments', 'units', 'staff'];
@@ -273,121 +284,49 @@ class MedicalEquipmentDB {
         return results;
     }
 
-    transformExcelData(excelData) {
-    console.log('🔄 Starting transformExcelData with', excelData.length, 'rows');
-    console.log('📋 Available columns:', excelData.length > 0 ? Object.keys(excelData[0]) : []);
-    
-    const devices = excelData.map((row, index) => {
-        console.log(`\n--- Processing row ${index} ---`);
-        console.log('📊 Row data:', row);
-        
-        const tenThietBi = this.extractDeviceName(row);
-        if (!tenThietBi) {
-            console.log(`❌ Skipping row ${index}: No device name`);
-            return null;
-        }
-
-        const soLuong = this.extractQuantity(row);
-        const nguyenGia = this.extractPrice(row); // Đơn giá
-        const thanhTien = this.extractTotalPrice(row); // Thành tiền
-        
-        console.log(`📊 Row ${index} Summary:`, {
-            name: tenThietBi,
-            quantity: soLuong,
-            unitPrice: nguyenGia,
-            totalPrice: thanhTien
-        });
-
-        return {
-            serial_number: `DEV_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 5)}`,
-            ten_thiet_bi: tenThietBi,
-            nam_san_xuat: this.extractYear(row),
-            so_luong: soLuong,
-            nguyen_gia: nguyenGia, // Lưu đơn giá
-            thanh_tien: thanhTien, // LƯU THÊM THÀNH TIỀN
-            phan_loai: this.determineCategory(tenThietBi),
-            don_vi_tinh: 'cái',
-            phong_ban: 'Khoa Gây mê hồi sức',
-            tinh_trang: 'Đang sử dụng',
-            nha_san_xuat: this.extractManufacturer(tenThietBi),
-            model: this.extractModel(tenThietBi),
-            ghi_chu: `Import từ Excel - ${new Date().toLocaleDateString('vi-VN')}`,
-            nhan_vien_ql: 'Quản trị viên',
-            ngay_nhap: new Date().toISOString().split('T')[0],
-            vi_tri: 'Khoa Gây mê hồi sức',
-            is_active: true,
-            parent_id: null
-        };
-    }).filter(device => device !== null);
-    
-    console.log('✅ Transform completed:', devices.length, 'devices created');
-    
-    // Thống kê
-    const totalValue = devices.reduce((sum, device) => sum + (device.thanh_tien || device.nguyen_gia * device.so_luong), 0);
-    console.log('💰 Total imported value:', this.formatCurrency(totalValue));
-    
-    return devices;
-}
-formatCurrency(amount) {
-    return new Intl.NumberFormat('vi-VN', {
-        style: 'currency',
-        currency: 'VND'
-    }).format(amount);
-}
 
 
-    // THÊM DEBUG vào extractDeviceName
 extractDeviceName(row) {
-    console.log('🔍 DEBUG extractDeviceName - Row data:', row);
-    
-    const nameKeys = ['Tên công cụ dụng cụ', 'Tên thiết bị', 'Tên', 'Device Name', 'TEN', 'A'];
-    
+    const nameKeys = [
+        'Tên công cụ dụng cụ', 'Tên thiết bị', 'Tên',
+        'Device Name', 'TEN', 'A'
+    ];
+
     for (const key of nameKeys) {
-        const value = row[key];
-        console.log(`🔍 Checking name key "${key}":`, value);
-        
-        if (value !== undefined && value !== null && value.toString().trim() !== '') {
-            const name = value.toString().trim();
-            console.log(`✅ Found device name from "${key}":`, name);
-            return name;
+        if (row[key] !== undefined && row[key] !== null) {
+            const name = row[key].toString().trim();
+            if (name !== "") return name;
         }
     }
-    
-    // Fallback: tìm cột đầu tiên có dữ liệu
-    for (const [key, value] of Object.entries(row)) {
-        if (value !== undefined && value !== null && value.toString().trim() !== '') {
-            const name = value.toString().trim();
-            console.log(`🔄 Fallback device name from "${key}":`, name);
-            return name;
+
+    // Fallback: lấy cột đầu tiên có dữ liệu rõ ràng
+    for (const [key, val] of Object.entries(row)) {
+        if (val !== undefined && val !== null && val.toString().trim() !== "") {
+            return val.toString().trim();
         }
     }
-    
-    console.log('❌ No device name found');
-    return '';
+
+    return "";
 }
 
-    // SỬA LẠI phương thức extractQuantity trong database.js
+
 extractQuantity(row) {
-    console.log('🔍 DEBUG extractQuantity - Row data:', row);
-    
-    const quantityKeys = ['Số lượng', 'SL', 'SoLuong', 'Quantity', 'Qty', 'Theo sổ kế toán', 'C'];
-    
-    for (const key of quantityKeys) {
-        const value = row[key];
-        console.log(`🔍 Checking quantity key "${key}":`, value);
-        
-        if (this.isValidValue(value)) {
-            const quantity = this.parseQuantityValue(value);
-            if (quantity > 0) {
-                console.log(`✅ Found quantity from "${key}":`, quantity);
-                return quantity;
-            }
+    const keys = ['Số lượng', 'SL', 'SoLuong', 'Quantity', 'Qty', 'Theo sổ kế toán', 'C'];
+
+    for (const key of keys) {
+        let val = row[key];
+
+        if (this.isValidValue(val)) {
+            let q = this.parseQuantityValue(val);
+            if (q > 0) return q;
         }
     }
-    
-    console.log('❌ No valid quantity found, defaulting to 1');
+
+    // Nếu không tìm thấy → trả 1 nhưng có log cảnh báo
+    console.warn("⚠ extractQuantity: không tìm thấy số lượng, tự đặt = 1", row);
     return 1;
 }
+
 
 // THÊM PHƯƠM THỨC PARSE SỐ LƯỢNG
 parseQuantityValue(value) {
@@ -414,43 +353,31 @@ parseQuantityValue(value) {
 }
 
 
-// GIẢI QUYẾT LỖI LẤY THÀNH TIỀN = 0
-
 extractTotalPrice(row) {
-    const totalPriceKeys = [
+    const keys = [
         'Thành tiền', 'Thanh tien', 'Tổng tiền', 'Tong tien',
         'Total Price', 'Total Cost', 'Amount'
     ];
 
-    // 1️⃣ Cố tìm theo đúng tên cột
-    for (const key of totalPriceKeys) {
+    for (const key of keys) {
         let val = row[key];
         if (this.isValidPriceValue(val)) {
-            let price = this.parsePriceValue(val);
-            console.log(`✅ Found total price from "${key}":`, price);
-            return price;
+            return this.parsePriceValue(val);
         }
     }
 
-    // 2️⃣ AUTO-DETECT: tìm cột nào có giá trị lớn nhất → chính là Thành tiền
-    let maxValue = 0;
+    // AUTO-DETECT cột lớn nhất → chính là Thành tiền
+    let max = 0;
     for (const [key, value] of Object.entries(row)) {
         if (this.isValidPriceValue(value)) {
             let p = this.parsePriceValue(value);
-            if (p > maxValue) {
-                maxValue = p;
-            }
+            if (p > max) max = p;
         }
     }
 
-    if (maxValue > 0) {
-        console.log(`🔍 Auto-detected total price = ${maxValue}`);
-        return maxValue;
-    }
-
-    console.log("❌ No total price found");
-    return 0;
+    return max > 0 ? max : 0;
 }
+
 
 
 
@@ -513,34 +440,144 @@ looksLikeYear(value) {
     if (typeof value !== 'number') return false;
     return (value >= 1900 && value <= 2030);
 }
+transformExcelData(excelData) {
+    console.log('🔄 Starting transformExcelData with', excelData.length, 'rows');
+    console.log('📋 Available columns:', excelData.length > 0 ? Object.keys(excelData[0]) : []);
+    
+    // Detect columns từ hàng đầu tiên
+    const columnMapping = this.detectColumnNames(excelData[0] || {});
+    console.log('🗺️ Column mapping:', columnMapping);
+    
+    const devices = excelData.map((row, index) => {
+        console.log(`\n--- Processing row ${index + 1} ---`);
+        console.log('📊 Row data:', row);
+        
+        // 1. Extract device name - có ưu tiên column mapping
+        const tenThietBi = this.extractDeviceName(row, columnMapping);
+        if (!tenThietBi || tenThietBi.trim() === '') {
+            console.log(`❌ Skipping row ${index + 1}: No device name`);
+            return null;
+        }
 
+        // 2. Extract values với column mapping
+        const soLuong = this.extractQuantity(row, columnMapping);
+        const nguyenGia = this.extractPrice(row, columnMapping); // Đơn giá
+        const thanhTien = this.extractTotalPrice(row, columnMapping); // Thành tiền
+        const namSanXuat = this.extractYear(row, columnMapping);
+        const model = this.extractModelFromRow(row, columnMapping);
+        const nhaSanXuat = this.extractManufacturerFromRow(row, columnMapping);
+        
+        console.log(`📊 Row ${index + 1} Summary:`, {
+            name: tenThietBi,
+            model: model,
+            manufacturer: nhaSanXuat,
+            year: namSanXuat,
+            quantity: soLuong,
+            unitPrice: nguyenGia,
+            totalPrice: thanhTien
+        });
 
-// THÊM PHƯƠNG THỨC EXTRACT NĂM CẢI TIẾN
-extractYear(row) {
+        // Tính thành tiền nếu không có
+        let finalThanhTien = thanhTien;
+        if (finalThanhTien === 0 && nguyenGia > 0 && soLuong > 0) {
+            finalThanhTien = nguyenGia * soLuong;
+            console.log(`💰 Calculated thanh_tien = ${nguyenGia} × ${soLuong} = ${finalThanhTien}`);
+        }
+
+        return {
+            serial_number: `IMPORT_${Date.now()}_${index}_${Math.random().toString(36).substr(2, 5)}`,
+            ten_thiet_bi: tenThietBi,
+            model: model || this.extractModel(tenThietBi),
+            nha_san_xuat: nhaSanXuat || this.extractManufacturer(tenThietBi),
+            nam_san_xuat: namSanXuat,
+            so_luong: soLuong,
+            nguyen_gia: nguyenGia,
+            thanh_tien: finalThanhTien,
+            phan_loai: this.determineCategory(tenThietBi),
+            don_vi_tinh: 'cái',
+            phong_ban: 'Khoa Gây mê hồi sức',
+            tinh_trang: 'Đang sử dụng',
+            ghi_chu: `Import từ Excel - ${new Date().toLocaleDateString('vi-VN')}`,
+            nhan_vien_ql: 'Quản trị viên',
+            ngay_nhap: new Date().toISOString().split('T')[0],
+            vi_tri: 'Khoa Gây mê hồi sức',
+            don_vi: '',
+            is_active: true,
+            parent_id: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+        };
+    }).filter(device => device !== null);
+    
+    console.log('✅ Transform completed:', devices.length, 'devices created');
+    
+    // Thống kê chi tiết
+    const stats = {
+        totalDevices: devices.length,
+        totalValue: devices.reduce((sum, device) => sum + (device.thanh_tien), 0),
+        totalQuantity: devices.reduce((sum, device) => sum + (device.so_luong), 0),
+        hasModel: devices.filter(d => d.model && d.model.trim() !== '').length,
+        hasYear: devices.filter(d => d.nam_san_xuat).length,
+        hasManufacturer: devices.filter(d => d.nha_san_xuat && d.nha_san_xuat.trim() !== '').length
+    };
+    
+    console.log('📈 Import Statistics:', {
+        'Total Devices': stats.totalDevices,
+        'Total Value': this.formatCurrency(stats.totalValue),
+        'Total Quantity': stats.totalQuantity,
+        'With Model': `${stats.hasModel} (${Math.round(stats.hasModel/stats.totalDevices*100)}%)`,
+        'With Year': `${stats.hasYear} (${Math.round(stats.hasYear/stats.totalDevices*100)}%)`,
+        'With Manufacturer': `${stats.hasManufacturer} (${Math.round(stats.hasManufacturer/stats.totalDevices*100)}%)`
+    });
+    
+    return devices;
+}
+
+// SỬA PHƯƠNG THỨC extractYear trong database.js
+extractYear(row, columnMapping = null) {
+    console.log('🔍 DEBUG extractYear - Row:', row);
+    
+    // Ưu tiên dùng column mapping nếu có
+    if (columnMapping) {
+        for (const [excelKey, dbKey] of Object.entries(columnMapping)) {
+            if (dbKey === 'nam_san_xuat') {
+                const value = row[excelKey];
+                if (this.isValidYearValue(value)) {
+                    const year = this.parseYearValue(value);
+                    console.log(`✅ Found year from mapped column "${excelKey}":`, year);
+                    return year;
+                }
+            }
+        }
+    }
+    
+    // Fallback: tìm theo keywords
     const yearKeys = [
         'Năm sản xuất', 'Năm SX', 'Nam san xuat', 'Year', 
-        'Năm', 'Năm sản xuất', 'Năm sản xuất', 'Năm sản xuất'
+        'Năm', 'Nam', 'Năm Sản Xuất', 'Năm s/x',
+        'C', 'C_NămSX', 'C_NamSX', 'C_Năm', 'C_Nam'
     ];
     
     for (const key of yearKeys) {
         const value = row[key];
-        if (this.isValidYearValue(value)) {
-            const year = parseInt(value.toString().trim());
-            if (!isNaN(year) && year >= 1900 && year <= 2030) {
-                console.log(`✅ Found year from "${key}":`, year);
+        if (value !== undefined && value !== null) {
+            console.log(`🔍 Checking year key "${key}":`, value);
+            if (this.isValidYearValue(value)) {
+                const year = this.parseYearValue(value);
+                console.log(`✅ Found year from key "${key}":`, year);
                 return year;
             }
         }
     }
     
-    // Tìm trong tất cả các cột có chứa từ "năm"
+    // Tìm cột có chứa "năm" hoặc "year"
     for (const [key, value] of Object.entries(row)) {
-        if (key.toLowerCase().includes('năm') && this.isValidYearValue(value)) {
-            const year = parseInt(value.toString().trim());
-            if (!isNaN(year) && year >= 1900 && year <= 2030) {
-                console.log(`✅ Found year from auto-detected key "${key}":`, year);
-                return year;
-            }
+        const lowerKey = key.toLowerCase();
+        if ((lowerKey.includes('năm') || lowerKey.includes('nam') || lowerKey.includes('year')) && 
+            this.isValidYearValue(value)) {
+            const year = this.parseYearValue(value);
+            console.log(`✅ Found year from auto-detected key "${key}":`, year);
+            return year;
         }
     }
     
@@ -548,13 +585,66 @@ extractYear(row) {
     return null;
 }
 
+// THÊM PHƯƠNG THỨC PARSE YEAR CẢI TIẾN
+parseYearValue(value) {
+    if (typeof value === 'number') {
+        // Xử lý số Excel date (ví dụ: 44008 = 2020)
+        if (value > 10000 && value < 60000) {
+            // Có thể là Excel date serial number
+            const date = new Date((value - 25569) * 86400 * 1000);
+            const year = date.getFullYear();
+            if (year >= 1900 && year <= 2030) {
+                console.log(`📅 Converted Excel date ${value} to year:`, year);
+                return year;
+            }
+        }
+        // Nếu là số bình thường
+        if (value >= 1900 && value <= 2030) return value;
+    }
+    
+    // Xử lý string
+    let strValue = value.toString().trim();
+    
+    // Bỏ công thức Excel
+    if (strValue.startsWith('=')) {
+        // Nếu có dạng =2020 hoặc ="2020"
+        const match = strValue.match(/(\d{4})/);
+        if (match) {
+            const year = parseInt(match[1]);
+            if (year >= 1900 && year <= 2030) return year;
+        }
+        return null;
+    }
+    
+    // Lấy 4 số liên tiếp
+    const yearMatch = strValue.match(/\b(19[0-9]{2}|20[0-2][0-9])\b/);
+    if (yearMatch) {
+        return parseInt(yearMatch[1]);
+    }
+    
+    // Parse số thông thường
+    strValue = strValue.replace(/[^\d]/g, '');
+    const year = parseInt(strValue);
+    
+    if (!isNaN(year) && year >= 1900 && year <= 2030) {
+        return year;
+    }
+    
+    return null;
+}
+
+// CẢI THIỆN isValidYearValue
 isValidYearValue(value) {
     if (value === undefined || value === null) return false;
+    
     const strValue = value.toString().trim();
     if (strValue === '') return false;
-    if (strValue.startsWith('=')) return false; // Bỏ qua công thức Excel
-    return true;
+    
+    // Kiểm tra xem có phải số hợp lệ không
+    const year = this.parseYearValue(value);
+    return year !== null;
 }
+
 
 // THÊM PHƯƠNG THỨC KIỂM TRA GIÁ TRỊ HỢP LỆ
 isValidValue(value) {
@@ -589,7 +679,27 @@ isValidValue(value) {
         if (name.includes('bóp bóng') || name.includes('ống') || name.includes('bông')) return 'VẬT TƯ Y TẾ';
         return 'DỤNG CỤ Y TẾ';
     }
+// Thêm vào class MedicalEquipmentDB trong database.js
 
+async getStaff(id) {
+    await this.ensureInitialized();
+    const transaction = this.db.transaction(['staff'], 'readonly');
+    const store = transaction.objectStore('staff');
+    
+    return new Promise((resolve, reject) => {
+        const request = store.get(id);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+async updateStaff(id, updates) {
+    return this.updateRecord('staff', id, updates);
+}
+
+async deleteStaff(id) {
+    return this.deleteRecord('staff', id);
+}
     async initializeSampleData() {
         try {
             const departments = await this.getAllDepartments();

@@ -4,80 +4,377 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Quản Lý Thiết Bị Y Tế - BV Ninh Thuận</title>
-    <link rel="stylesheet" href="style.css">
+    
+    <!-- Select2 CSS -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
     <link rel="stylesheet" href="enhanced-devices.css">
     <link rel="preload" href="https://cdn.jsdelivr.net/npm/chart.js" as="script">
+    
+    
+    <style>
+        .loading-app {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        .loading-spinner {
+            font-size: 48px;
+            margin-bottom: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        /* CSS bổ sung cho Select2 và tính năng creatable */
+        .select2-container .select2-selection--single {
+            height: 38px !important;
+            border-radius: 4px !important;
+            border: 1px solid #ced4da !important;
+        }
+        
+        .select2-container--default .select2-selection--single .select2-selection__rendered {
+            line-height: 36px !important;
+        }
+        
+        .select2-container--default .select2-selection--single .select2-selection__arrow {
+            height: 36px !important;
+        }
+        
+        /* Style cho option tạo mới */
+        .select2-results__option--create {
+            color: #007bff !important;
+            font-style: italic !important;
+            background-color: #f8f9fa !important;
+        }
+        
+        .select2-results__option--create:hover {
+            background-color: #e9ecef !important;
+        }
+        
+        /* Dropdown width cho form */
+        .modal .select2-container {
+            width: 100% !important;
+        }
+    </style>
 </head>
 <body>
-    <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="header-content">
-                <h1>🏥 Quản Lý Thiết Bị Y Tế</h1>
-                <p>Bệnh viện tỉnh Ninh Thuận - Khoa Gây mê hồi sức</p>
-            </div>
-            <div class="user-info">
-                <span id="current-user">Quản trị viên</span>
-                <button id="logout-btn">Đăng xuất</button>
-            </div>
-        </header>
-
-        <!-- Navigation Tabs -->
-        <nav class="tab-navigation">
-            <button class="tab-btn" data-tab="import">Import Excel</button>
-        </nav>
-
-        <!-- Main Content -->
-        <main class="main-content">
-            <!-- Import Tab -->
-            <div id="import" class="tab-content">
-                <div class="tab-header">
-                    <h2>Import từ Excel</h2>
-                </div>
-                
-                <div class="import-container">
-                    <div class="upload-area" id="upload-area">
-                        <input type="file" id="excel-file" accept=".xlsx, .xls" hidden>
-                        <div class="upload-placeholder">
-                            <span>📁 Kéo thả file Excel vào đây hoặc click để chọn</span>
-                            <p>Hỗ trợ định dạng .xlsx, .xls</p>
-                        </div>
-                    </div>
-
-                    <div id="preview-section" class="preview-section" style="display: none;">
-                        <h3>Xem trước dữ liệu</h3>
-                        <div class="table-container">
-                            <table id="preview-table" class="data-table">
-                                <!-- Preview data will be loaded here -->
-                            </table>
-                        </div>
-                        
-                        <div class="import-actions">
-                            <button id="confirm-import" class="btn-primary">Xác nhận Import</button>
-                            <button id="cancel-import" class="btn-secondary">Hủy</button>
-                        </div>
-                    </div>
-
-                    
-                </div>
-            </div>
+    <div id="app">
+        <!-- App sẽ được render bởi hienthi.js -->
+        <div class="loading-app">
+            <div class="loading-spinner">🔄</div>
+            <p>Đang tải ứng dụng...</p>
         </div>
     </div>
+<script src="https://unpkg.com/qrcode-generator@1.4.4/qrcode.js"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- jQuery (yêu cầu cho Select2) -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     
-     <script src="database.js"></script>
-    <script src="database-extended.js"></script>
-    <script src="app.js"></script>
+    <!-- Select2 JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    
+    <!-- Charts & Excel Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="./libs/qrcode.min.js"></script>
+
+
+    <!-- Database -->
+    <script src="database.js"></script>
+    
+    <!-- Core System -->
+    <script src="app.js"></script>
+    
+    <!-- Modules -->
+    <script src="demo-data.js"></script>
+    <script src="hienthi.js"></script>
+    <script src="history.js"></script>
+    <script src="quanly.js"></script>
+    <script src="loc.js"></script>
+    <script src="phanloai.js"></script>
+    <script src="thongke.js"></script>
+    <script src="baotri.js"></script>
+    <script src="xuatdulieu.js"></script>
+    <script src="notification.js"></script>
+    <script src="grouping.js"></script>
     <script src="import.js"></script>
-    <script src="enhanced-devices-core.js"></script>
-    <script src="enhanced-devices-views.js"></script>
-    <script src="enhanced-devices-filters.js"></script>
-    <script src="enhanced-devices-bulk.js"></script>
-    <script src="enhanced-devices-export.js"></script>
-    <script src="enhanced-devices-maintenance.js"></script>
+    
 
-
+    <!-- Script tùy chỉnh cho creatable select -->
+    <script>
+        // Hàm khởi tạo Select2 cho các dropdown
+        function initializeSelect2() {
+            // Khởi tạo cho dropdown trong bulk panel
+            setTimeout(() => {
+                // Bulk panel dropdowns
+                if ($('#bulk-category').length) {
+                    $('#bulk-category').select2({
+                        placeholder: "📋 Chọn phân loại...",
+                        allowClear: true,
+                        tags: true,
+                        createTag: function (params) {
+                            const term = $.trim(params.term);
+                            if (term === '') return null;
+                            
+                            return {
+                                id: term.toLowerCase().replace(/\s+/g, '-'),
+                                text: term.toUpperCase() + ' (mới)',
+                                newTag: true,
+                                group: 'created'
+                            };
+                        }
+                    }).on('select2:select', handleNewCategory);
+                }
+                
+                if ($('#bulk-department').length) {
+                    $('#bulk-department').select2({
+                        placeholder: "🏥 Thay đổi phòng ban...",
+                        allowClear: true,
+                        tags: true,
+                        createTag: function (params) {
+                            const term = $.trim(params.term);
+                            if (term === '') return null;
+                            
+                            return {
+                                id: term,
+                                text: term + ' (tạo mới)',
+                                newTag: true
+                            };
+                        }
+                    }).on('select2:select', handleNewDepartment);
+                }
+                
+                if ($('#bulk-staff').length) {
+                    $('#bulk-staff').select2({
+                        placeholder: "👤 Thay đổi nhân viên...",
+                        allowClear: true,
+                        tags: true,
+                        createTag: function (params) {
+                            const term = $.trim(params.term);
+                            if (term === '') return null;
+                            
+                            return {
+                                id: term,
+                                text: term + ' (thêm mới)',
+                                newTag: true
+                            };
+                        }
+                    }).on('select2:select', handleNewStaff);
+                }
+                
+                if ($('#bulk-unit').length) {
+                    $('#bulk-unit').select2({
+                        placeholder: "📦 Thay đổi đơn vị...",
+                        allowClear: true,
+                        tags: true,
+                        createTag: function (params) {
+                            const term = $.trim(params.term);
+                            if (term === '') return null;
+                            
+                            return {
+                                id: term,
+                                text: term + ' (thêm mới)',
+                                newTag: true
+                            };
+                        }
+                    }).on('select2:select', handleNewUnit);
+                }
+                
+                // Khởi tạo cho dropdown trong form chỉnh sửa thiết bị
+                if ($('#edit-phong-ban').length) {
+                    $('#edit-phong-ban').select2({
+                        placeholder: "Chọn phòng ban",
+                        allowClear: true,
+                        tags: true,
+                        createTag: function (params) {
+                            const term = $.trim(params.term);
+                            if (term === '') return null;
+                            
+                            return {
+                                id: term,
+                                text: term + ' (tạo mới)',
+                                newTag: true
+                            };
+                        }
+                    }).on('select2:select', handleNewDepartment);
+                }
+                
+                if ($('#edit-nhan-vien').length) {
+                    $('#edit-nhan-vien').select2({
+                        placeholder: "Chọn nhân viên",
+                        allowClear: true,
+                        tags: true,
+                        createTag: function (params) {
+                            const term = $.trim(params.term);
+                            if (term === '') return null;
+                            
+                            return {
+                                id: term,
+                                text: term + ' (thêm mới)',
+                                newTag: true
+                            };
+                        }
+                    }).on('select2:select', handleNewStaff);
+                }
+            }, 500);
+        }
+        
+        // Xử lý tạo phân loại mới
+        async function handleNewCategory(e) {
+            const data = e.params.data;
+            if (data.newTag) {
+                const categoryName = data.text.replace(' (mới)', '');
+                
+                // Hiển thị thông báo
+                AppEvents.emit('notification:show', {
+                    message: `Đã thêm phân loại: ${categoryName}`,
+                    type: 'success'
+                });
+                
+                // Phân loại sản phẩm thường không cần lưu vào database
+                // Chỉ cần thêm vào dropdown là đủ
+            }
+        }
+        
+        // Xử lý tạo phòng ban mới
+        async function handleNewDepartment(e) {
+            const data = e.params.data;
+            if (data.newTag && window.phanLoaiXuLyManager) {
+                const deptName = data.text.replace(' (tạo mới)', '');
+                
+                try {
+                    await medicalDB.addDepartment({ ten_phong: deptName });
+                    
+                    // Refresh filter dropdown
+                    if (window.locManager && window.locManager.loadDepartments) {
+                        window.locManager.loadDepartments();
+                    }
+                    
+                    AppEvents.emit('notification:show', {
+                        message: `Đã thêm phòng ban: ${deptName}`,
+                        type: 'success'
+                    });
+                } catch (error) {
+                    AppEvents.emit('notification:show', {
+                        message: `Lỗi khi thêm phòng ban: ${error.message}`,
+                        type: 'error'
+                    });
+                    
+                    // Reset select
+                    $(e.target).val(null).trigger('change');
+                }
+            }
+        }
+        
+        // Xử lý tạo nhân viên mới
+        async function handleNewStaff(e) {
+            const data = e.params.data;
+            if (data.newTag && window.phanLoaiXuLyManager) {
+                const staffName = data.text.replace(' (thêm mới)', '');
+                const position = prompt(`Nhập chức vụ cho "${staffName}" (không bắt buộc):`, '');
+                
+                try {
+                    await medicalDB.addStaff({ 
+                        ten_nhan_vien: staffName,
+                        ten: staffName,
+                        chuc_vu: position || ''
+                    });
+                    
+                    // Refresh filter dropdown
+                    if (window.locManager && window.locManager.loadStaff) {
+                        window.locManager.loadStaff();
+                    }
+                    
+                    AppEvents.emit('notification:show', {
+                        message: `Đã thêm nhân viên: ${staffName}`,
+                        type: 'success'
+                    });
+                } catch (error) {
+                    AppEvents.emit('notification:show', {
+                        message: `Lỗi khi thêm nhân viên: ${error.message}`,
+                        type: 'error'
+                    });
+                    
+                    // Reset select
+                    $(e.target).val(null).trigger('change');
+                }
+            }
+        }
+        
+        // Xử lý tạo đơn vị mới
+        async function handleNewUnit(e) {
+            const data = e.params.data;
+            if (data.newTag && window.phanLoaiXuLyManager) {
+                const unitName = data.text.replace(' (thêm mới)', '');
+                
+                try {
+                    await medicalDB.addUnit({ ten_don_vi: unitName });
+                    
+                    // Refresh filter dropdown
+                    if (window.locManager && window.locManager.loadUnits) {
+                        window.locManager.loadUnits();
+                    }
+                    
+                    AppEvents.emit('notification:show', {
+                        message: `Đã thêm đơn vị: ${unitName}`,
+                        type: 'success'
+                    });
+                } catch (error) {
+                    AppEvents.emit('notification:show', {
+                        message: `Lỗi khi thêm đơn vị: ${error.message}`,
+                        type: 'error'
+                    });
+                    
+                    // Reset select
+                    $(e.target).val(null).trigger('change');
+                }
+            }
+        }
+        
+        // Gọi khi app ready
+        document.addEventListener('DOMContentLoaded', function() {
+            // Lắng nghe sự kiện app ready
+            AppEvents.on('app:ready', () => {
+                setTimeout(initializeSelect2, 1000);
+            });
+            
+            // Cũng gọi khi có modal mới được mở
+            setInterval(() => {
+                if ($('.modal').is(':visible')) {
+                    $('.modal select:not(.select2-hidden-accessible)').each(function() {
+                        if ($(this).attr('id') && $(this).attr('id').includes('edit-')) {
+                            $(this).select2({
+                                dropdownParent: $(this).closest('.modal'),
+                                tags: true,
+                                createTag: function (params) {
+                                    const term = $.trim(params.term);
+                                    if (term === '') return null;
+                                    
+                                    const suffix = $(this).attr('id').includes('phong-ban') ? 
+                                        ' (tạo mới)' : ' (thêm mới)';
+                                    
+                                    return {
+                                        id: term,
+                                        text: term + suffix,
+                                        newTag: true
+                                    };
+                                }
+                            });
+                        }
+                    });
+                }
+            }, 1000);
+        });
+        
+    </script>
 </body>
 </html>
