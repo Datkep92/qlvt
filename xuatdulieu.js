@@ -1,4 +1,4 @@
-// xuatdulieu.js - Phiên bản HIỂN THỊ CHI TIẾT KHI QUÉT
+// xuatdulieu.js - PHIÊN BẢN HOÀN CHỈNH
 class XuatDuLieuManager {
     constructor() {
         this.moduleName = "XuatDuLieuManager";
@@ -16,17 +16,457 @@ class XuatDuLieuManager {
     
     setup() {
         console.log('✅ XuatDuLieuManager ready');
+        // Kiểm tra database
+        if (!window.medicalDB) {
+            console.warn('⚠️ medicalDB chưa được khởi tạo');
+        }
+    }
+    
+    // ==================== EXPORT EXCEL ====================
+    async exportToExcel() {
+        try {
+            this.showLoading('Đang xuất Excel...');
+            
+            // Lấy dữ liệu từ database
+            const devices = await this.getAllDevices();
+            
+            if (!devices || devices.length === 0) {
+                this.hideLoading();
+                AppEvents.emit('notification:show', {
+                    message: 'Không có dữ liệu để xuất',
+                    type: 'warning'
+                });
+                return;
+            }
+            
+            // Tạo workbook
+            const wb = XLSX.utils.book_new();
+            const wsData = [
+                // Header
+                ['STT', 'Mã TB', 'Tên thiết bị', 'Model', 'NSX', 'Năm SX', 
+                 'Số lượng', 'Đơn vị', 'Nguyên giá', 'Thành tiền', 
+                 'Tình trạng', 'Phòng ban', 'NV QL', 'Phân loại', 'Serial', 'Ghi chú'],
+                // Data
+                ...devices.map((device, index) => [
+                    index + 1,
+                    device.id || '',
+                    device.ten_thiet_bi || '',
+                    device.model || '',
+                    device.nha_san_xuat || '',
+                    device.nam_san_xuat || '',
+                    device.so_luong || 0,
+                    device.don_vi_tinh || 'cái',
+                    device.nguyen_gia || 0,
+                    (device.nguyen_gia || 0) * (device.so_luong || 1),
+                    device.tinh_trang || '',
+                    device.phong_ban || '',
+                    device.nhan_vien_ql || '',
+                    device.phan_loai || '',
+                    device.serial_number || '',
+                    device.ghi_chu || ''
+                ])
+            ];
+            
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // Định dạng cột
+            const wscols = [
+                {wch: 5},   // STT
+                {wch: 10},  // Mã TB
+                {wch: 30},  // Tên
+                {wch: 15},  // Model
+                {wch: 20},  // NSX
+                {wch: 8},   // Năm
+                {wch: 8},   // SL
+                {wch: 8},   // ĐVT
+                {wch: 15},  // Giá
+                {wch: 15},  // Thành tiền
+                {wch: 12},  // Tình trạng
+                {wch: 20},  // Phòng ban
+                {wch: 15},  // NV QL
+                {wch: 15},  // Phân loại
+                {wch: 15},  // Serial
+                {wch: 30}   // Ghi chú
+            ];
+            ws['!cols'] = wscols;
+            
+            XLSX.utils.book_append_sheet(wb, ws, "ThietBiYTe");
+            
+            // Xuất file
+            const fileName = `ThietBiYTe_${new Date().toISOString().split('T')[0]}.xlsx`;
+            XLSX.writeFile(wb, fileName);
+            
+            // Log activity
+            await this.logActivity(`Xuất Excel ${devices.length} thiết bị`);
+            
+            this.hideLoading();
+            AppEvents.emit('notification:show', {
+                message: `✅ Đã xuất ${devices.length} thiết bị ra Excel`,
+                type: 'success'
+            });
+            
+        } catch (error) {
+            console.error('Export Excel error:', error);
+            this.hideLoading();
+            AppEvents.emit('notification:show', {
+                message: '❌ Lỗi xuất Excel: ' + error.message,
+                type: 'error'
+            });
+        }
+    }
+    
+    // ==================== EXPORT BẢO TRÌ ====================
+    async exportMaintenance() {
+        try {
+            this.showLoading('Đang lọc thiết bị cần bảo trì...');
+            
+            const devices = await this.getAllDevices();
+            const maintenanceDevices = devices.filter(device => 
+                device.tinh_trang?.includes('Bảo trì') || 
+                device.tinh_trang?.includes('Sửa chữa') ||
+                device.ghi_chu?.toLowerCase().includes('bảo trì')
+            );
+            
+            if (maintenanceDevices.length === 0) {
+                this.hideLoading();
+                AppEvents.emit('notification:show', {
+                    message: 'Không có thiết bị cần bảo trì',
+                    type: 'info'
+                });
+                return;
+            }
+            
+            // Tạo file Excel
+            const wb = XLSX.utils.book_new();
+            const wsData = [
+                ['DANH SÁCH THIẾT BỊ CẦN BẢO TRÌ'],
+                ['Ngày xuất:', new Date().toLocaleDateString('vi-VN')],
+                ['Tổng số:', maintenanceDevices.length],
+                [], // Dòng trống
+                ['STT', 'Mã TB', 'Tên thiết bị', 'Model', 'Phòng ban', 
+                 'Tình trạng', 'Nguyên nhân', 'Ưu tiên', 'Ngày báo', 'Người báo']
+            ];
+            
+            // Thêm dữ liệu
+            maintenanceDevices.forEach((device, index) => {
+                wsData.push([
+                    index + 1,
+                    device.id,
+                    device.ten_thiet_bi,
+                    device.model || '',
+                    device.phong_ban || '',
+                    device.tinh_trang || '',
+                    this.extractMaintenanceReason(device.ghi_chu),
+                    this.getPriority(device.tinh_trang),
+                    new Date().toLocaleDateString('vi-VN'),
+                    device.nhan_vien_ql || 'Hệ thống'
+                ]);
+            });
+            
+            const ws = XLSX.utils.aoa_to_sheet(wsData);
+            
+            // Merge title rows
+            ws['!merges'] = [
+                XLSX.utils.decode_range("A1:J1"),
+                XLSX.utils.decode_range("A2:J2"),
+                XLSX.utils.decode_range("A3:J3")
+            ];
+            
+            XLSX.utils.book_append_sheet(wb, ws, "BaoTri");
+            XLSX.writeFile(wb, `BaoTri_ThietBi_${new Date().toISOString().split('T')[0]}.xlsx`);
+            
+            await this.logActivity(`Xuất báo cáo bảo trì ${maintenanceDevices.length} thiết bị`);
+            
+            this.hideLoading();
+            AppEvents.emit('notification:show', {
+                message: `✅ Đã xuất ${maintenanceDevices.length} thiết bị cần bảo trì`,
+                type: 'success'
+            });
+            
+        } catch (error) {
+            console.error('Export maintenance error:', error);
+            this.hideLoading();
+            AppEvents.emit('notification:show', {
+                message: '❌ Lỗi xuất báo cáo',
+                type: 'error'
+            });
+        }
+    }
+    
+    extractMaintenanceReason(ghiChu) {
+        if (!ghiChu) return 'Không có thông tin';
+        const lower = ghiChu.toLowerCase();
+        if (lower.includes('hỏng')) return 'Hỏng hóc';
+        if (lower.includes('lỗi')) return 'Lỗi kỹ thuật';
+        if (lower.includes('mòn')) return 'Hao mòn tự nhiên';
+        if (lower.includes('định kỳ')) return 'Bảo trì định kỳ';
+        return 'Khác';
+    }
+    
+    getPriority(status) {
+        if (!status) return 'Trung bình';
+        if (status.includes('Khẩn')) return 'Cao';
+        if (status.includes('Nguy hiểm')) return 'Rất cao';
+        return 'Trung bình';
+    }
+    
+    // ==================== QR CODE SYSTEM ====================
+    createDeviceURL(device) {
+        const qrData = {
+            id: device.id,
+            n: this.escapeForURL(device.ten_thiet_bi || ''),
+            m: this.escapeForURL(device.model || ''),
+            sx: this.escapeForURL(device.nha_san_xuat || ''),
+            y: device.nam_san_xuat || '',
+            q: device.so_luong || 1,
+            p: device.nguyen_gia || 0,
+            s: this.escapeForURL(device.tinh_trang || 'Đang sử dụng'),
+            pb: this.escapeForURL(device.phong_ban || ''),
+            pl: this.escapeForURL(device.phan_loai || ''),
+            dv: this.escapeForURL(device.don_vi_tinh || 'cái'),
+            nv: this.escapeForURL(device.nhan_vien_ql || ''),
+            sn: device.serial_number || '',
+            gc: this.escapeForURL((device.ghi_chu || '').substring(0, 200)),
+            t: Date.now()
+        };
+        
+        const queryString = Object.entries(qrData)
+            .filter(([_, value]) => value !== '')
+            .map(([key, value]) => `${key}=${value}`)
+            .join('&');
+        
+        // Dùng relative URL để hoạt động mọi nơi
+        return `qr-display.html?${queryString}`;
+    }
+    
+    escapeForURL(text) {
+        if (!text) return '';
+        return encodeURIComponent(String(text))
+            .replace(/'/g, "%27")
+            .replace(/"/g, "%22")
+            .replace(/\s/g, '+');
+    }
+    
+    async generateQRWithSelected() {
+        const checkboxes = document.querySelectorAll('.qr-selection-modal .device-checkbox-input:checked');
+        
+        if (checkboxes.length === 0) {
+            AppEvents.emit('notification:show', {
+                message: 'Vui lòng chọn ít nhất 1 thiết bị',
+                type: 'warning'
+            });
+            return;
+        }
+        
+        const selectedDevices = [];
+        checkboxes.forEach(cb => {
+            try {
+                const deviceData = JSON.parse(cb.getAttribute('data-device'));
+                selectedDevices.push(deviceData);
+            } catch (e) {
+                console.error('Error parsing device:', e);
+            }
+        });
+        
+        // Đóng modal
+        const modal = document.querySelector('.qr-selection-modal');
+        if (modal) modal.remove();
+        
+        // Tạo QR
+        this.generateDetailedQR(selectedDevices);
+    }
+    
+    async generateDetailedQR(devices) {
+        if (devices.length === 0) return;
+        
+        this.showLoading(`Đang tạo ${devices.length} QR Code...`);
+        
+        const qrResults = [];
+        for (const device of devices) {
+            try {
+                const qrData = await this.createSingleQR(device);
+                qrResults.push({
+                    id: device.id,
+                    data: qrData,
+                    device: device
+                });
+            } catch (error) {
+                console.log('QR error for', device.id);
+            }
+        }
+        
+        this.generateQRPrintPage(qrResults);
+        this.hideLoading();
+        
+        AppEvents.emit('notification:show', {
+            message: `✅ Đã tạo ${qrResults.length} QR Code`,
+            type: 'success'
+        });
+    }
+    
+    createSingleQR(device) {
+        return new Promise((resolve) => {
+            const tempDiv = document.createElement('div');
+            tempDiv.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
+            document.body.appendChild(tempDiv);
+            
+            const qrText = this.createDeviceURL(device);
+            
+            new QRCode(tempDiv, {
+                text: qrText,
+                width: 200,
+                height: 200,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.Q
+            });
+            
+            setTimeout(() => {
+                const canvas = tempDiv.querySelector('canvas');
+                if (canvas) {
+                    resolve(canvas.toDataURL('image/png'));
+                } else {
+                    resolve(this.createPlaceholderQR(device));
+                }
+                document.body.removeChild(tempDiv);
+            }, 150);
+        });
+    }
+    
+    createPlaceholderQR(device) {
+        const svg = `<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+            <rect width="200" height="200" fill="#f5f5f5"/>
+            <rect x="10" y="10" width="180" height="180" fill="white" stroke="#ccc" stroke-width="1"/>
+            <text x="100" y="80" text-anchor="middle" font-family="Arial" font-size="12" fill="#333">
+                ${(device.ten_thiet_bi || 'TB').substring(0, 15)}
+            </text>
+            <text x="100" y="110" text-anchor="middle" font-family="Arial" font-size="10" fill="#666">
+                ID: ${device.id}
+            </text>
+            <text x="100" y="130" text-anchor="middle" font-family="Arial" font-size="9" fill="#999">
+                Quét để xem chi tiết
+            </text>
+        </svg>`;
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+    
+    generateQRPrintPage(qrResults) {
+        const html = `
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>QR Code Thiết Bị</title>
+            <style>
+                @page { margin: 0.5cm; }
+                body { font-family: Arial; margin: 0; padding: 10px; }
+                .page { 
+                    display: grid; 
+                    grid-template-columns: repeat(3, 1fr);
+                    gap: 15px;
+                    page-break-after: always;
+                }
+                @media print {
+                    .page { grid-template-columns: repeat(4, 1fr); }
+                }
+                .qr-item { 
+                    text-align: center; 
+                    padding: 10px; 
+                    border: 1px solid #ddd;
+                    page-break-inside: avoid;
+                }
+                .qr-img { width: 120px; height: 120px; }
+                .qr-info { font-size: 11px; margin-top: 5px; }
+                .device-name { font-weight: bold; }
+                .device-id { color: #666; font-size: 10px; }
+                .header { 
+                    text-align: center; 
+                    margin-bottom: 20px;
+                    border-bottom: 2px solid #333;
+                    padding-bottom: 10px;
+                }
+                .no-print { display: none; }
+            </style>
+        </head>
+        <body>
+            <div class="header">
+                <h2>QR CODE THIẾT BỊ Y TẾ</h2>
+                <p>Bệnh viện Ninh Thuận | ${qrResults.length} thiết bị | ${new Date().toLocaleDateString('vi-VN')}</p>
+            </div>
+            
+            <div class="page">
+                ${qrResults.map(item => `
+                    <div class="qr-item">
+                        <img src="${item.data}" class="qr-img">
+                        <div class="qr-info">
+                            <div class="device-name">${this.escapeHtml(item.device.ten_thiet_bi.substring(0, 25))}</div>
+                            <div class="device-id">ID: ${item.device.id}</div>
+                            <div>${item.device.phong_ban || ''}</div>
+                            <div style="font-size: 9px; color: #777;">${new Date().toLocaleDateString('vi-VN')}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+            
+            <div class="no-print" style="text-align: center; margin-top: 30px;">
+                <button onclick="window.print()">🖨️ In trang</button>
+                <button onclick="window.close()">✖️ Đóng</button>
+            </div>
+        </body>
+        </html>`;
+        
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(html);
+        printWindow.document.close();
+    }
+    
+    // ==================== HELPER FUNCTIONS ====================
+    async getAllDevices() {
+        // Kiểm tra nhiều nguồn database
+        if (window.medicalDB && typeof medicalDB.getAllDevices === 'function') {
+            return await medicalDB.getAllDevices();
+        }
+        
+        if (window.deviceManager && typeof deviceManager.getAllDevices === 'function') {
+            return deviceManager.getAllDevices();
+        }
+        
+        // Fallback: lấy từ localStorage
+        try {
+            const stored = localStorage.getItem('medical_devices');
+            return stored ? JSON.parse(stored) : [];
+        } catch {
+            return [];
+        }
+    }
+    
+    async logActivity(description) {
+        const activity = {
+            type: 'export',
+            description: description,
+            timestamp: new Date().toISOString(),
+            user: 'Hệ thống'
+        };
+        
+        // Lưu vào database nếu có
+        if (window.medicalDB && medicalDB.addActivity) {
+            await medicalDB.addActivity(activity);
+        }
+        
+        // Lưu vào localStorage
+        try {
+            const activities = JSON.parse(localStorage.getItem('activities') || '[]');
+            activities.push(activity);
+            localStorage.setItem('activities', JSON.stringify(activities.slice(-100)));
+        } catch (e) {
+            console.log('Log activity error:', e);
+        }
     }
     
     showExportOptions() {
         const modal = this.createModal('export-modal');
-        modal.innerHTML = this.getExportOptionsHTML();
-        document.body.appendChild(modal);
-    }
-    
-    getExportOptionsHTML() {
-        return `
-            <div class="modal-content">
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
                 <div class="modal-header">
                     <h3>📤 XUẤT DỮ LIỆU</h3>
                     <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
@@ -45,27 +485,138 @@ class XuatDuLieuManager {
                             <div class="export-icon">🛠️</div>
                             <div class="export-info">
                                 <h4>Báo cáo bảo trì</h4>
-                                <p>Xuất danh sách thiết bị cần bảo trì</p>
+                                <p>Xuất thiết bị cần bảo trì/sửa chữa</p>
                             </div>
                         </div>
                         
                         <div class="export-option" onclick="window.xuatDuLieuManager.showQRSelectionModal()">
                             <div class="export-icon">📱</div>
                             <div class="export-info">
-                                <h4>QR Code Chi Tiết</h4>
-                                <p>QR chứa đầy đủ thông tin thiết bị</p>
+                                <h4>QR Code</h4>
+                                <p>Tạo QR Code cho thiết bị đã chọn</p>
                             </div>
                         </div>
                     </div>
                 </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+    
+    async showQRSelectionModal() {
+        try {
+            this.showLoading('Đang tải danh sách...');
+            const devices = await this.getAllDevices();
+            
+            if (devices.length === 0) {
+                this.hideLoading();
+                AppEvents.emit('notification:show', {
+                    message: 'Không có thiết bị',
+                    type: 'warning'
+                });
+                return;
+            }
+            
+            const modal = this.createModal('qr-selection-modal');
+            modal.innerHTML = this.getQRSelectionHTML(devices);
+            document.body.appendChild(modal);
+            
+            this.hideLoading();
+            
+            // Bind events
+            setTimeout(() => {
+                modal.querySelector('#select-all-devices')?.addEventListener('change', (e) => {
+                    this.toggleSelectAll(e.target.checked);
+                });
+                
+                modal.querySelectorAll('.device-checkbox-input').forEach(cb => {
+                    cb.addEventListener('change', () => this.updateSelectionCount());
+                });
+                
+                modal.querySelector('#generate-qr-btn')?.addEventListener('click', () => {
+                    this.generateQRWithSelected();
+                });
+            }, 100);
+            
+        } catch (error) {
+            console.error('Error:', error);
+            this.hideLoading();
+            AppEvents.emit('notification:show', {
+                message: 'Lỗi tải dữ liệu',
+                type: 'error'
+            });
+        }
+    }
+    
+    getQRSelectionHTML(devices) {
+        const groups = this.groupByDepartment(devices);
+        
+        return `
+            <div class="modal-content" style="max-width: 700px; max-height: 80vh;">
+                <div class="modal-header">
+                    <h3>📱 CHỌN THIẾT BỊ TẠO QR</h3>
+                    <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <div style="margin-bottom: 15px;">
+                        <input type="checkbox" id="select-all-devices">
+                        <label for="select-all-devices" style="margin-left: 5px;">
+                            Chọn tất cả (${devices.length})
+                        </label>
+                        <div id="selected-count" style="float: right; background: #e3f2fd; padding: 5px 10px; border-radius: 4px;">
+                            Đã chọn: 0
+                        </div>
+                    </div>
+                    
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        ${Object.entries(groups).map(([dept, deptDevices]) => `
+                            <div class="department-section">
+                                <div style="background: #f5f5f5; padding: 8px; font-weight: bold; margin: 10px 0;">
+                                    ${this.escapeHtml(dept)} (${deptDevices.length})
+                                </div>
+                                ${deptDevices.map(device => `
+                                    <div style="padding: 5px 0 5px 20px;">
+                                        <input type="checkbox" 
+                                               class="device-checkbox-input"
+                                               id="dev-${device.id}"
+                                               data-device='${JSON.stringify(device)}'>
+                                        <label for="dev-${device.id}" style="margin-left: 5px; cursor: pointer;">
+                                            <strong>${this.escapeHtml(device.ten_thiet_bi)}</strong>
+                                            <span style="color: #666; font-size: 12px; margin-left: 10px;">
+                                                ${device.model || ''} | SL: ${device.so_luong}
+                                            </span>
+                                        </label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
                 <div class="modal-footer">
-                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">Đóng</button>
+                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
+                    <button class="btn-primary" id="generate-qr-btn" disabled>
+                        📱 Tạo QR Code
+                    </button>
                 </div>
             </div>
         `;
     }
     
+    toggleSelectAll(checked) {
+        document.querySelectorAll('.qr-selection-modal .device-checkbox-input')
+            .forEach(cb => cb.checked = checked);
+        this.updateSelectionCount();
+    }
     
+    updateSelectionCount() {
+        const checkboxes = document.querySelectorAll('.qr-selection-modal .device-checkbox-input:checked');
+        const count = checkboxes.length;
+        const countEl = document.getElementById('selected-count');
+        const btn = document.getElementById('generate-qr-btn');
+        
+        if (countEl) countEl.textContent = `Đã chọn: ${count}`;
+        if (btn) btn.disabled = count === 0;
+    }
     
     groupByDepartment(devices) {
         const groups = {};
@@ -77,1284 +628,22 @@ class XuatDuLieuManager {
         return groups;
     }
     
-
-
-checkSelection() {
-    const checkboxes = document.querySelectorAll('#qr-selection-modal .device-checkbox input[type="checkbox"]:checked');
-    const selectedCount = checkboxes.length;
-    
-    const generateBtn = document.getElementById('generate-qr-btn');
-    if (generateBtn) {
-        generateBtn.disabled = selectedCount === 0;
-        
-        // Có thể thêm số lượng vào button nếu muốn
-        generateBtn.textContent = selectedCount > 0 
-            ? `📱 Tạo QR Code (${selectedCount})` 
-            : '📱 Tạo QR Code';
-    }
-    
-    // Cập nhật select all checkbox
-    const selectAllCheckbox = document.getElementById('select-all-devices');
-    if (selectAllCheckbox) {
-        const totalCheckboxes = document.querySelectorAll('#qr-selection-modal .device-checkbox input[type="checkbox"]').length;
-        
-        if (selectedCount === 0) {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = false;
-        } else if (selectedCount === totalCheckboxes) {
-            selectAllCheckbox.checked = true;
-            selectAllCheckbox.indeterminate = false;
-        } else {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = true;
-        }
-    }
-}
-
-// PHIÊN BẢN FIX LỖI CHECKBOX HOÀN TOÀN
-async showQRSelectionModal() {
-    try {
-        this.showLoading('Đang tải danh sách thiết bị...');
-        
-        const devices = await medicalDB.getAllDevices();
-        
-        if (devices.length === 0) {
-            AppEvents.emit('notification:show', {
-                message: 'Không có thiết bị để tạo QR Code',
-                type: 'error'
-            });
-            this.hideLoading();
-            return;
-        }
-        
-        const modal = this.createModal('qr-selection-modal');
-        modal.innerHTML = this.getQRSelectionHTML(devices);
-        document.body.appendChild(modal);
-        
-        this.hideLoading();
-        this.closeExportModal();
-        
-        // GÁN LẠI SỰ KIỆN SAU KHI MODAL ĐƯỢC RENDER
-        setTimeout(() => {
-            this.bindQRModalEvents();
-        }, 100);
-        
-    } catch (error) {
-        console.error('Error loading devices for QR:', error);
-        this.hideLoading();
-        AppEvents.emit('notification:show', {
-            message: '❌ Lỗi khi tải danh sách thiết bị',
-            type: 'error'
-        });
-    }
-}
-
-getQRSelectionHTML(devices) {
-    const groupedDevices = this.groupByDepartment(devices);
-    
-    return `
-        <div class="modal-content" style="max-width: 700px; max-height: 80vh; overflow-y: auto;">
-            <div class="modal-header">
-                <h3>📱 CHỌN THIẾT BỊ TẠO QR CODE</h3>
-                <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
-            </div>
-            <div class="modal-body">
-                <div class="qr-selection">
-                    <div class="selection-controls" style="margin-bottom: 15px;">
-                        <div class="select-all-group">
-                            <input type="checkbox" id="select-all-devices">
-                            <label for="select-all-devices" style="cursor: pointer; font-weight: bold;">
-                                Chọn tất cả (${devices.length} thiết bị)
-                            </label>
-                        </div>
-                    </div>
-                    
-                    <div id="selected-count-display" style="margin: 10px 0; padding: 8px; background: #e8f4ff; border-radius: 4px; display: none;">
-                        <strong>Đã chọn: <span id="selected-count">0</span> thiết bị</strong>
-                    </div>
-                    
-                    <div class="devices-list">
-                        ${Object.entries(groupedDevices).map(([dept, deptDevices]) => `
-                            <div class="department-group">
-                                <div class="dept-header" style="cursor: pointer; padding: 10px; background: #f5f5f5; margin: 5px 0; border-radius: 4px;">
-                                    <span class="dept-name">${this.escapeHtml(dept)}</span>
-                                    <span class="dept-count">(${deptDevices.length})</span>
-                                    <span class="toggle-icon">▼</span>
-                                </div>
-                                <div class="dept-devices" style="padding-left: 20px; margin-bottom: 15px;">
-                                    ${deptDevices.map(device => `
-                                        <div class="device-checkbox" style="margin: 5px 0;">
-                                            <input type="checkbox" 
-                                                   id="device-${device.id}" 
-                                                   value="${device.id}"
-                                                   class="device-checkbox-input"
-                                                   data-device='${JSON.stringify(device)}'>
-                                            <label for="device-${device.id}" 
-                                                   style="cursor: pointer; display: block; padding: 8px; border: 1px solid #eee; border-radius: 4px;"
-                                                   title="${this.escapeHtml(device.ten_thiet_bi)}">
-                                                <strong>${this.shortenText(device.ten_thiet_bi, 40)}</strong>
-                                                <div style="font-size: 12px; color: #666; margin-top: 3px;">
-                                                    ${device.model ? `• Model: ${device.model}` : ''}
-                                                    • SL: ${device.so_luong}
-                                                    • ${device.tinh_trang}
-                                                </div>
-                                            </label>
-                                        </div>
-                                    `).join('')}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
-                <button class="btn-primary" id="generate-qr-btn" style="min-width: 150px;" disabled>
-                    📱 Tạo QR Code
-                </button>
-            </div>
-        </div>
-    `;
-}
-
-// GÁN SỰ KIỆN SAU KHI MODAL ĐƯỢC TẠO
-bindQRModalEvents() {
-    const modal = document.querySelector('.qr-selection-modal');
-    if (!modal) return;
-    
-    // 1. Sự kiện cho checkbox thiết bị
-    modal.querySelectorAll('.device-checkbox-input').forEach(checkbox => {
-        checkbox.addEventListener('change', () => {
-            this.updateSelectedCount();
-        });
-    });
-    
-    // 2. Sự kiện cho chọn tất cả
-    const selectAllCheckbox = modal.querySelector('#select-all-devices');
-    if (selectAllCheckbox) {
-        selectAllCheckbox.addEventListener('change', (e) => {
-            this.toggleSelectAllDevices(e.target.checked);
-        });
-    }
-    
-    // 3. Sự kiện cho nút tạo QR
-    const generateBtn = modal.querySelector('#generate-qr-btn');
-    if (generateBtn) {
-        generateBtn.addEventListener('click', () => {
-            this.generateQRWithSelected();
-        });
-    }
-    
-    // 4. Sự kiện cho toggle department
-    modal.querySelectorAll('.dept-header').forEach(header => {
-        header.addEventListener('click', () => {
-            const devicesDiv = header.nextElementSibling;
-            if (devicesDiv) {
-                devicesDiv.style.display = devicesDiv.style.display === 'none' ? 'block' : 'none';
-                header.querySelector('.toggle-icon').textContent = 
-                    devicesDiv.style.display === 'none' ? '▶' : '▼';
-            }
-        });
-    });
-}
-
-toggleSelectAllDevices(checked) {
-    const checkboxes = document.querySelectorAll('.qr-selection-modal .device-checkbox-input');
-    checkboxes.forEach(checkbox => {
-        checkbox.checked = checked;
-    });
-    
-    this.updateSelectedCount();
-}
-
-updateSelectedCount() {
-    const checkboxes = document.querySelectorAll('.qr-selection-modal .device-checkbox-input:checked');
-    const selectedCount = checkboxes.length;
-    
-    console.log('Selected count:', selectedCount, checkboxes); // Debug
-    
-    // Hiển thị số lượng đã chọn
-    const countDisplay = document.getElementById('selected-count-display');
-    const countSpan = document.getElementById('selected-count');
-    const generateBtn = document.getElementById('generate-qr-btn');
-    
-    if (countSpan) {
-        countSpan.textContent = selectedCount;
-    }
-    
-    if (countDisplay) {
-        countDisplay.style.display = selectedCount > 0 ? 'block' : 'none';
-    }
-    
-    if (generateBtn) {
-        generateBtn.disabled = selectedCount === 0;
-        generateBtn.textContent = selectedCount > 0 
-            ? `📱 Tạo QR Code (${selectedCount})` 
-            : '📱 Tạo QR Code';
-    }
-    
-    // Cập nhật select all checkbox
-    const selectAllCheckbox = document.getElementById('select-all-devices');
-    if (selectAllCheckbox) {
-        const totalCheckboxes = document.querySelectorAll('.qr-selection-modal .device-checkbox-input').length;
-        
-        if (selectedCount === 0) {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = false;
-        } else if (selectedCount === totalCheckboxes) {
-            selectAllCheckbox.checked = true;
-            selectAllCheckbox.indeterminate = false;
-        } else {
-            selectAllCheckbox.checked = false;
-            selectAllCheckbox.indeterminate = true;
-        }
-    }
-}
-
-async generateQRWithSelected() {
-    const checkboxes = document.querySelectorAll('.qr-selection-modal .device-checkbox-input:checked');
-    
-    console.log('Generating QR for:', checkboxes.length, 'devices'); // Debug
-    
-    if (checkboxes.length === 0) {
-        AppEvents.emit('notification:show', {
-            message: 'Vui lòng chọn ít nhất 1 thiết bị',
-            type: 'warning'
-        });
-        return;
-    }
-    
-    const selectedDevices = [];
-    checkboxes.forEach(cb => {
-        try {
-            const deviceData = JSON.parse(cb.getAttribute('data-device'));
-            selectedDevices.push(deviceData);
-        } catch (e) {
-            console.error('Error parsing device data:', e);
-        }
-    });
-    
-    console.log('Selected devices:', selectedDevices); // Debug
-    
-    if (selectedDevices.length === 0) {
-        AppEvents.emit('notification:show', {
-            message: 'Không có dữ liệu thiết bị hợp lệ',
-            type: 'error'
-        });
-        return;
-    }
-    
-    // Đóng modal chọn thiết bị
-    const modal = document.querySelector('.qr-selection-modal');
-    if (modal) modal.remove();
-    
-    // Tạo QR Code với thiết bị đã chọn
-    this.generateDetailedQR(selectedDevices);
-}
-
-    
-    async generateDetailedQR(devices) {
-        try {
-            if (!this.qrCodeReady) {
-                AppEvents.emit('notification:show', {
-                    message: 'Thư viện QR Code chưa sẵn sàng',
-                    type: 'warning'
-                });
-                return;
-            }
-            
-            if (devices.length === 0) {
-                AppEvents.emit('notification:show', {
-                    message: 'Không có thiết bị để tạo QR Code',
-                    type: 'error'
-                });
-                return;
-            }
-            
-            this.showLoading(`Đang tạo QR Code cho ${devices.length} thiết bị...`);
-            
-            // Tạo QR Code với đầy đủ thông tin
-            const qrResults = [];
-            
-            for (const device of devices) {
-                try {
-                    // Tạo data URL cho từng thiết bị
-                    const qrData = await this.createDeviceQRCode(device);
-                    
-                    qrResults.push({
-                        id: device.id,
-                        data: qrData,
-                        device: device // Lưu cả object device để hiển thị
-                    });
-                    
-                } catch (error) {
-                    console.log('QR error for device', device.id);
-                    qrResults.push({
-                        id: device.id,
-                        data: this.createPlaceholder(device.id, device.ten_thiet_bi),
-                        device: device,
-                        error: true
-                    });
-                }
-            }
-            
-            // Tạo trang HTML để xem thông tin
-            this.generateQRInfoPage(qrResults);
-            
-            await medicalDB.addActivity({
-                type: 'export',
-                description: `Tạo QR Code chi tiết cho ${qrResults.length} thiết bị`,
-                user: 'Quản trị viên'
-            });
-            
-            AppEvents.emit('notification:show', {
-                message: `✅ Đã tạo QR Code cho ${qrResults.length} thiết bị`,
-                type: 'success'
-            });
-            
-            this.hideLoading();
-            
-        } catch (error) {
-            console.error('Error generating QR:', error);
-            AppEvents.emit('notification:show', {
-                message: '❌ Lỗi khi tạo QR Code',
-                type: 'error'
-            });
-            this.hideLoading();
-        }
-    }
-    
-    // TẠO QR CODE VỚI THÔNG TIN CHI TIẾT
-    createDeviceQRCode(device) {
-        return new Promise((resolve, reject) => {
-            // Tạo div ẩn
-            const tempDiv = document.createElement('div');
-            tempDiv.style.cssText = 'position:absolute;left:-9999px;top:-9999px';
-            document.body.appendChild(tempDiv);
-            
-            try {
-                // Tạo URL chứa thông tin chi tiết
-                const qrText = this.createDeviceURL(device);
-                
-                const qr = new QRCode(tempDiv, {
-                    text: qrText,
-                    width: 150, // Kích thước lớn hơn để dễ quét
-                    height: 150,
-                    colorDark: "#000000",
-                    colorLight: "#ffffff",
-                    correctLevel: QRCode.CorrectLevel.M
-                });
-                
-                // Đợi tạo QR
-                setTimeout(() => {
-                    try {
-                        const canvas = tempDiv.querySelector('canvas');
-                        const img = tempDiv.querySelector('img');
-                        
-                        let dataUrl;
-                        if (canvas) {
-                            dataUrl = canvas.toDataURL('image/png');
-                        } else if (img && img.src) {
-                            dataUrl = img.src;
-                        }
-                        
-                        // Dọn dẹp
-                        if (tempDiv.parentNode) {
-                            document.body.removeChild(tempDiv);
-                        }
-                        
-                        if (dataUrl) {
-                            resolve(dataUrl);
-                        } else {
-                            reject(new Error('No QR generated'));
-                        }
-                        
-                    } catch (err) {
-                        if (tempDiv.parentNode) {
-                            document.body.removeChild(tempDiv);
-                        }
-                        reject(err);
-                    }
-                }, 100);
-                
-            } catch (error) {
-                if (tempDiv.parentNode) {
-                    document.body.removeChild(tempDiv);
-                }
-                reject(error);
-            }
-        });
-    }
-    
-createDeviceURL(device) {
-    const deviceInfo = {
-        id: device.id,
-        name: device.ten_thiet_bi,
-        model: device.model || '',
-        manufacturer: device.nha_san_xuat || '',
-        year: device.nam_san_xuat || '',
-        quantity: device.so_luong,
-        price: device.nguyen_gia || 0,
-        status: device.tinh_trang,
-        department: device.phong_ban || '',
-        category: device.phan_loai || '',
-        note: device.ghi_chu || '',
-        serial: device.serial_number || '',
-        unit: device.don_vi_tinh || 'cái',
-        manager: device.nhan_vien_ql || '',
-        timestamp: new Date().toISOString()
-    };
-    
-    const jsonString = JSON.stringify(deviceInfo);
-    const base64Data = btoa(unescape(encodeURIComponent(jsonString)));
-    
-    // URL GitHub Pages của bạn
-    return `https://datkep92.github.io/qlvt/qr-display.html#${base64Data}`;
-}
-
-// TẠO TRANG HIỂN THỊ THÔNG TIN KHI QUÉT QR (trang riêng)
-generateQRInfoPage(qrResults) {
-    // Đầu tiên, tạo file qr-display.html
-    this.createQRDisplayHTML();
-    
-    // Sau đó tạo trang in QR
-    const html = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="UTF-8">
-            <title>QR Code Thiết Bị - Bệnh viện Ninh Thuận</title>
-            <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <style>
-                * { box-sizing: border-box; }
-                body { 
-                    font-family: 'Segoe UI', Arial, sans-serif; 
-                    margin: 0; 
-                    padding: 15px; 
-                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                    min-height: 100vh;
-                }
-                .container { 
-                    max-width: 1000px; 
-                    margin: 0 auto; 
-                    background: white; 
-                    border-radius: 12px; 
-                    padding: 20px; 
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-                }
-                h1 { 
-                    text-align: center; 
-                    color: #2c3e50; 
-                    margin: 0 0 10px; 
-                    font-size: 24px;
-                }
-                .subtitle { 
-                    text-align: center; 
-                    color: #666; 
-                    margin-bottom: 20px;
-                    font-size: 14px;
-                }
-                .qr-grid { 
-                    display: grid; 
-                    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); 
-                    gap: 15px; 
-                    margin-bottom: 25px;
-                }
-                .qr-item { 
-                    text-align: center; 
-                    padding: 15px; 
-                    border: 1px solid #e0e0e0; 
-                    border-radius: 8px; 
-                    background: #fafafa;
-                    transition: transform 0.2s, box-shadow 0.2s;
-                }
-                .qr-img { 
-                    width: 140px; 
-                    height: 140px; 
-                    margin: 0 auto 10px; 
-                    display: block;
-                    border: 1px solid #ddd;
-                    border-radius: 4px;
-                }
-                .qr-text { 
-                    font-size: 12px; 
-                    line-height: 1.4; 
-                    color: #333;
-                }
-                .device-name { 
-                    font-weight: bold; 
-                    color: #2c3e50; 
-                    margin-bottom: 5px;
-                    font-size: 13px;
-                }
-                .device-info {
-                    font-size: 11px;
-                    color: #666;
-                    margin: 3px 0;
-                }
-                .qr-url {
-                    font-size: 10px;
-                    color: #888;
-                    word-break: break-all;
-                    margin-top: 5px;
-                }
-                .controls { 
-                    text-align: center; 
-                    margin: 20px 0; 
-                    padding: 15px;
-                    background: #f8f9fa;
-                    border-radius: 8px;
-                }
-                .btn { 
-                    padding: 10px 20px; 
-                    background: #28a745; 
-                    color: white; 
-                    border: none; 
-                    border-radius: 6px; 
-                    cursor: pointer; 
-                    font-size: 14px;
-                    margin: 5px;
-                    transition: background 0.2s;
-                }
-                .btn:hover { background: #218838; }
-                .btn-print { background: #007bff; }
-                .btn-print:hover { background: #0056b3; }
-                .btn-save { background: #6c757d; }
-                .btn-save:hover { background: #545b62; }
-                .info-panel {
-                    background: #e3f2fd;
-                    border-left: 4px solid #2196f3;
-                    padding: 15px;
-                    border-radius: 4px;
-                    margin: 20px 0;
-                    font-size: 13px;
-                }
-                
-                @media print {
-                    .controls { display: none; }
-                    body { background: white; }
-                    .container { box-shadow: none; }
-                }
-                @media (max-width: 768px) {
-                    .qr-grid { grid-template-columns: repeat(2, 1fr); }
-                }
-                @media (max-width: 480px) {
-                    .qr-grid { grid-template-columns: 1fr; }
-                    .container { padding: 10px; }
-                }
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <h1>📱 QR CODE THIẾT BỊ Y TẾ</h1>
-                <div class="subtitle">
-                    Bệnh viện Ninh Thuận | ${qrResults.length} thiết bị | ${new Date().toLocaleDateString('vi-VN')}
-                </div>
-                
-                <div class="info-panel">
-                    <strong>📌 Hướng dẫn sử dụng:</strong>
-                    <ul style="margin: 5px 0 0 20px;">
-                        <li>Quét QR Code bằng camera điện thoại</li>
-                        <li>QR Code sẽ mở trang thông tin chi tiết thiết bị</li>
-                        <li>In và dán QR lên thiết bị để quản lý</li>
-                        <li>URL trong QR: ${window.location.origin}/qr-display.html</li>
-                    </ul>
-                </div>
-                
-                <div class="controls">
-                    <button class="btn btn-print" onclick="window.print()">🖨️ In Trang</button>
-                    <button class="btn btn-save" onclick="saveAllQR()">💾 Tải QR Code</button>
-                </div>
-                
-                <div class="qr-grid">
-                    ${qrResults.map(item => {
-                        const device = item.device;
-                        const shortName = this.shortenText(device.ten_thiet_bi, 25);
-                        const qrUrl = this.createDeviceURL(device);
-                        
-                        return `
-                            <div class="qr-item">
-                                <img src="${item.data}" alt="QR ${device.id}" class="qr-img">
-                                <div class="qr-text">
-                                    <div class="device-name">${this.escapeHtml(shortName)}</div>
-                                    <div class="device-info">ID: ${device.id}</div>
-                                    <div class="device-info">Model: ${this.escapeHtml(device.model || 'N/A')}</div>
-                                    <div class="device-info">SL: ${device.so_luong} ${device.don_vi_tinh || 'cái'}</div>
-                                    <div class="device-info">${device.phong_ban ? this.escapeHtml(device.phong_ban) : ''}</div>
-                                    <div class="qr-url" title="${qrUrl}">📱 Quét để xem chi tiết</div>
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
-                
-                <div style="text-align: center; margin-top: 20px; font-size: 12px; color: #777;">
-                    <p>© ${new Date().getFullYear()} - Hệ thống Quản lý Thiết bị Y tế | Quét QR để truy xuất thông tin</p>
-                </div>
-            </div>
-            
-            <script>
-                // Lưu tất cả QR Code
-                function saveAllQR() {
-                    const qrData = ${JSON.stringify(qrResults.map(r => ({ id: r.id, data: r.data, name: r.device.ten_thiet_bi })))};
-                    
-                    if (!confirm('Lưu tất cả QR Code (${qrResults.length} file)?')) return;
-                    
-                    let savedCount = 0;
-                    qrData.forEach((item, index) => {
-                        setTimeout(() => {
-                            try {
-                                const link = document.createElement('a');
-                                const safeName = (item.name || 'device').replace(/[^a-z0-9]/gi, '_').substring(0, 30);
-                                link.download = 'QR_' + item.id + '_' + safeName + '.png';
-                                link.href = item.data;
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                savedCount++;
-                                
-                                if (savedCount === qrData.length) {
-                                    alert('✅ Đã lưu ' + savedCount + ' QR Code');
-                                }
-                            } catch (error) {
-                                console.log('Error saving QR', error);
-                            }
-                        }, index * 300);
-                    });
-                }
-                
-                // Tự động hỏi in nếu ít thiết bị
-                if (${qrResults.length} <= 12) {
-                    setTimeout(() => {
-                        if (confirm('Bạn có muốn in QR Code ngay?')) {
-                            window.print();
-                        }
-                    }, 1000);
-                }
-            </script>
-        </body>
-        </html>
-    `;
-    
-    const qrWindow = window.open('', '_blank');
-    if (qrWindow) {
-        qrWindow.document.write(html);
-        qrWindow.document.close();
-    }
-}
-
-// TẠO FILE qr-display.html RIÊNG
-createQRDisplayHTML() {
-    const html = `
-<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thông Tin Thiết Bị Y Tế - Bệnh viện Ninh Thuận</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            text-align: center;
-            position: relative;
-        }
-        
-        .header h1 {
-            font-size: 24px;
-            margin-bottom: 5px;
-        }
-        
-        .header .subtitle {
-            font-size: 14px;
-            opacity: 0.9;
-        }
-        
-        .hospital-logo {
-            position: absolute;
-            top: 20px;
-            left: 25px;
-            font-size: 30px;
-        }
-        
-        .content {
-            padding: 30px;
-        }
-        
-        .device-info-section {
-            margin-bottom: 30px;
-        }
-        
-        .section-title {
-            font-size: 18px;
-            color: #2c3e50;
-            margin-bottom: 15px;
-            padding-bottom: 8px;
-            border-bottom: 2px solid #eaeaea;
-            display: flex;
-            align-items: center;
-        }
-        
-        .section-title i {
-            margin-right: 10px;
-            font-size: 20px;
-        }
-        
-        .info-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-            gap: 15px;
-        }
-        
-        .info-item {
-            margin-bottom: 12px;
-        }
-        
-        .info-label {
-            font-weight: 600;
-            color: #555;
-            font-size: 14px;
-            margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-        }
-        
-        .info-label i {
-            margin-right: 8px;
-            width: 20px;
-            text-align: center;
-        }
-        
-        .info-value {
-            font-size: 15px;
-            color: #333;
-            padding-left: 28px;
-        }
-        
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-        
-        .status-using {
-            background-color: #d4edda;
-            color: #155724;
-        }
-        
-        .status-maintenance {
-            background-color: #fff3cd;
-            color: #856404;
-        }
-        
-        .status-broken {
-            background-color: #f8d7da;
-            color: #721c24;
-        }
-        
-        .status-inactive {
-            background-color: #e2e3e5;
-            color: #383d41;
-        }
-        
-        .price-value {
-            color: #e74c3c;
-            font-weight: bold;
-            font-size: 16px;
-        }
-        
-        .note-box {
-            background-color: #f8f9fa;
-            border-left: 4px solid #3498db;
-            padding: 15px;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-        
-        .footer {
-            text-align: center;
-            padding: 20px;
-            background-color: #f8f9fa;
-            border-top: 1px solid #eaeaea;
-            color: #666;
-            font-size: 13px;
-        }
-        
-        .loading {
-            text-align: center;
-            padding: 50px;
-            font-size: 16px;
-            color: #666;
-        }
-        
-        .error {
-            text-align: center;
-            padding: 50px;
-            color: #e74c3c;
-        }
-        
-        .error i {
-            font-size: 40px;
-            margin-bottom: 15px;
-        }
-        
-        .btn-back {
-            display: inline-block;
-            margin-top: 20px;
-            padding: 10px 20px;
-            background-color: #3498db;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            transition: background-color 0.3s;
-        }
-        
-        .btn-back:hover {
-            background-color: #2980b9;
-        }
-        
-        .qr-reminder {
-            text-align: center;
-            padding: 15px;
-            background-color: #e8f4ff;
-            border-radius: 8px;
-            margin: 20px 0;
-            font-size: 14px;
-        }
-        
-        @media (max-width: 768px) {
-            .container {
-                margin: 10px;
-            }
-            
-            .content {
-                padding: 20px;
-            }
-            
-            .info-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .header h1 {
-                font-size: 20px;
-            }
-        }
-        
-        @media (max-width: 480px) {
-            body {
-                padding: 10px;
-            }
-            
-            .header {
-                padding: 20px 15px;
-            }
-            
-            .content {
-                padding: 15px;
-            }
-            
-            .hospital-logo {
-                position: relative;
-                top: 0;
-                left: 0;
-                margin-bottom: 10px;
-            }
-        }
-        
-        /* Animation for loading */
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        .fade-in {
-            animation: fadeIn 0.5s ease-out;
-        }
-    </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="hospital-logo">🏥</div>
-            <h1>BỆNH VIỆN NINH THUẬN</h1>
-            <div class="subtitle">Hệ thống Quản lý Thiết bị Y tế</div>
-        </div>
-        
-        <div class="content">
-            <div id="loading" class="loading">
-                <i class="fas fa-spinner fa-spin fa-2x"></i>
-                <p>Đang tải thông tin thiết bị...</p>
-            </div>
-            
-            <div id="error" class="error" style="display: none;">
-                <i class="fas fa-exclamation-triangle"></i>
-                <h3>Không tìm thấy thông tin thiết bị</h3>
-                <p>QR Code không hợp lệ hoặc đã hết hạn</p>
-                <a href="javascript:history.back()" class="btn-back">
-                    <i class="fas fa-arrow-left"></i> Quay lại
-                </a>
-            </div>
-            
-            <div id="device-info" style="display: none;">
-                <!-- Device information will be inserted here by JavaScript -->
-            </div>
-            
-            <div class="qr-reminder">
-                <i class="fas fa-qrcode"></i>
-                <strong>Thông tin được truy xuất từ QR Code</strong>
-                <p>Quét QR Code trên thiết bị để xem thông tin cập nhật mới nhất</p>
-            </div>
-        </div>
-        
-        <div class="footer">
-            <p>© ${new Date().getFullYear()} - Bệnh viện Ninh Thuận</p>
-            <p>Liên hệ: Phòng Công nghệ thông tin - ĐT: 0259.3xxxxxx</p>
-            <p>Thông tin chỉ dùng cho mục đích quản lý nội bộ</p>
-        </div>
-    </div>
-
-    <script>
-        // Function to get URL parameter
-        function getUrlParameter(name) {
-            const urlParams = new URLSearchParams(window.location.search);
-            return urlParams.get(name);
-        }
-        
-        // Function to decode base64
-        function decodeBase64(str) {
-            try {
-                return decodeURIComponent(escape(atob(str)));
-            } catch (e) {
-                console.error('Decode error:', e);
-                return null;
-            }
-        }
-        
-        // Function to format currency
-        function formatCurrency(amount) {
-            if (!amount) return '0 ₫';
-            return new Intl.NumberFormat('vi-VN', {
-                style: 'currency',
-                currency: 'VND'
-            }).format(amount);
-        }
-        
-        // Function to get status class
-        function getStatusClass(status) {
-            const statusMap = {
-                'Đang sử dụng': 'status-using',
-                'Bảo trì': 'status-maintenance',
-                'Hỏng': 'status-broken',
-                'Ngừng sử dụng': 'status-inactive',
-                'Mới': 'status-using',
-                'Cũ': 'status-maintenance'
-            };
-            return statusMap[status] || 'status-inactive';
-        }
-        
-        // Function to escape HTML
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        // Main function to load device info
-        async function loadDeviceInfo() {
-            const loadingEl = document.getElementById('loading');
-            const errorEl = document.getElementById('error');
-            const deviceInfoEl = document.getElementById('device-info');
-            
-            // Get device data from URL
-            const encodedData = getUrlParameter('device');
-            
-            if (!encodedData) {
-                loadingEl.style.display = 'none';
-                errorEl.style.display = 'block';
-                return;
-            }
-            
-            try {
-                // Decode the data
-                const jsonStr = decodeBase64(encodedData);
-                if (!jsonStr) throw new Error('Invalid data');
-                
-                const device = JSON.parse(jsonStr);
-                
-                // Calculate total value
-                const totalValue = (device.price || 0) * (device.quantity || 1);
-                
-                // Create HTML for device info
-                const html = \`
-                    <div class="device-info-section fade-in">
-                        <h2 class="section-title">
-                            <i class="fas fa-microscope"></i> THÔNG TIN THIẾT BỊ
-                        </h2>
-                        
-                        <div class="info-grid">
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-tag"></i> Tên thiết bị:
-                                </div>
-                                <div class="info-value" style="font-size: 18px; font-weight: bold; color: #2c3e50;">
-                                    \${escapeHtml(device.name)}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-barcode"></i> Mã thiết bị:
-                                </div>
-                                <div class="info-value">
-                                    #\${device.id}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-cube"></i> Model:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.model) || 'Không có thông tin'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-industry"></i> Nhà sản xuất:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.manufacturer) || 'Không có thông tin'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-calendar-alt"></i> Năm sản xuất:
-                                </div>
-                                <div class="info-value">
-                                    \${device.year || 'Không có thông tin'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-boxes"></i> Số lượng:
-                                </div>
-                                <div class="info-value">
-                                    \${device.quantity} \${device.unit || 'cái'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-money-bill-wave"></i> Đơn giá:
-                                </div>
-                                <div class="info-value price-value">
-                                    \${formatCurrency(device.price)}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-calculator"></i> Thành tiền:
-                                </div>
-                                <div class="info-value price-value">
-                                    \${formatCurrency(totalValue)}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-check-circle"></i> Tình trạng:
-                                </div>
-                                <div class="info-value">
-                                    <span class="status-badge \${getStatusClass(device.status)}">
-                                        \${device.status}
-                                    </span>
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-building"></i> Phòng ban:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.department) || 'Chưa phân bổ'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-user-tie"></i> Nhân viên QL:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.manager) || 'Chưa phân công'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-layer-group"></i> Phân loại:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.category) || 'Chưa phân loại'}
-                                </div>
-                            </div>
-                            
-                            <div class="info-item">
-                                <div class="info-label">
-                                    <i class="fas fa-hashtag"></i> Serial Number:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.serial) || 'Không có'}
-                                </div>
-                            </div>
-                        </div>
-                        
-                        \${device.note ? \`
-                            <div class="note-box">
-                                <div class="info-label">
-                                    <i class="fas fa-sticky-note"></i> Ghi chú:
-                                </div>
-                                <div class="info-value">
-                                    \${escapeHtml(device.note)}
-                                </div>
-                            </div>
-                        \` : ''}
-                    </div>
-                    
-                    <div style="text-align: center; margin-top: 30px;">
-                        <a href="javascript:window.print()" class="btn-back" style="margin-right: 10px;">
-                            <i class="fas fa-print"></i> In thông tin
-                        </a>
-                        <a href="javascript:history.back()" class="btn-back">
-                            <i class="fas fa-arrow-left"></i> Quay lại
-                        </a>
-                    </div>
-                \`;
-                
-                // Hide loading, show device info
-                loadingEl.style.display = 'none';
-                deviceInfoEl.innerHTML = html;
-                deviceInfoEl.style.display = 'block';
-                
-                // Update page title
-                document.title = \`Thiết bị: \${escapeHtml(device.name)} - Bệnh viện Ninh Thuận\`;
-                
-            } catch (error) {
-                console.error('Error loading device:', error);
-                loadingEl.style.display = 'none';
-                errorEl.style.display = 'block';
-            }
-        }
-        
-        // Load device info when page loads
-        document.addEventListener('DOMContentLoaded', loadDeviceInfo);
-        
-        // Add service worker for offline capability (optional)
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./qr-display-sw.js')
-                    .catch(err => console.log('ServiceWorker registration failed: ', err));
-            });
-        }
-    </script>
-</body>
-</html>`;
-    
-    // Tạo một Blob và download file qr-display.html
-    const blob = new Blob([html], { type: 'text/html' });
-    const url = URL.createObjectURL(blob);
-    
-    // Tạo link download (cho phép lưu file)
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'qr-display.html';
-    a.style.display = 'none';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    // Cũng có thể tạo file ngay trong hệ thống
-    console.log('✅ Đã tạo file qr-display.html');
-    console.log('Lưu ý: Đặt file qr-display.html cùng thư mục với ứng dụng');
-    
-    return url;
-}
-
-// ... (phần còn lại của class giữ nguyên) ...
-    
-    // Các hàm helper giữ nguyên
-    shortenText(text, maxLength) {
-        if (!text) return '';
-        if (text.length <= maxLength) return text;
-        return text.substring(0, maxLength - 3) + '...';
-    }
-    
-    createPlaceholder(id, name) {
-        const shortName = this.shortenText(name || '', 8);
-        const svg = `<svg width="100" height="100">
-            <rect width="100" height="100" fill="#f8f8f8"/>
-            <rect x="5" y="5" width="90" height="90" fill="white" stroke="#ccc"/>
-            <text x="50" y="40" text-anchor="middle" font-family="Arial" font-size="9">${shortName}</text>
-            <text x="50" y="60" text-anchor="middle" font-family="Arial" font-size="8">ID:${id}</text>
-        </svg>`;
-        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
-    }
-    
     showLoading(message) {
         let loading = document.getElementById('global-loading');
         if (!loading) {
             loading = document.createElement('div');
             loading.id = 'global-loading';
             loading.style.cssText = `
-                position: fixed;
-                top: 0; left: 0;
-                width: 100%; height: 100%;
-                background: rgba(0,0,0,0.7);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 9999;
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+                background: rgba(0,0,0,0.7); z-index: 9999;
+                display: flex; align-items: center; justify-content: center;
             `;
             document.body.appendChild(loading);
         }
-        
         loading.innerHTML = `
             <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
-                <div style="font-size: 30px; margin-bottom: 10px;">⏳</div>
-                <div style="font-weight: bold;">${message}</div>
+                <div style="font-size: 30px;">⏳</div>
+                <div style="font-weight: bold; margin-top: 10px;">${message}</div>
             </div>
         `;
     }
@@ -1364,31 +653,17 @@ createQRDisplayHTML() {
         if (loading) loading.remove();
     }
     
-    closeExportModal() {
-        const modal = document.querySelector('.export-modal');
-        if (modal) modal.remove();
-    }
-    
     createModal(className) {
         const modal = document.createElement('div');
         modal.className = `modal ${className}`;
         modal.style.cssText = `
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
         `;
-        
         modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
+            if (e.target === modal) modal.remove();
         });
-        
         return modal;
     }
     
