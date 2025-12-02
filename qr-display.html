@@ -1,238 +1,442 @@
 <!DOCTYPE html>
-<html>
+<html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Thông Tin Thiết Bị Y Tế</title>
+    <title>Thông Tin Thiết Bị</title>
     <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
             background: #f0f2f5;
             min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 10px;
-            padding: 30px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+            background: white; 
+            border-radius: 12px; 
+            padding: 25px; 
+            box-shadow: 0 5px 15px rgba(0,0,0,0.08);
         }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
+        .header { 
+            text-align: center; 
+            margin-bottom: 25px;
             padding-bottom: 20px;
             border-bottom: 2px solid #eaeaea;
         }
-        h1 { color: #2c3e50; margin-bottom: 10px; }
-        .device-info { margin: 20px 0; }
-        .info-row {
-            display: flex;
-            padding: 12px 0;
-            border-bottom: 1px solid #eee;
+        .hospital-name { 
+            color: #2c3e50; 
+            font-size: 24px;
+            margin-bottom: 5px;
         }
-        .label { width: 200px; font-weight: bold; color: #555; }
-        .value { flex: 1; color: #333; }
-        .no-data {
+        .subtitle { 
+            color: #7f8c8d; 
+            font-size: 14px;
+        }
+        .device-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+        }
+        .device-name {
+            font-size: 22px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        .device-id {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-bottom: 15px;
+        }
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .info-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            border-left: 4px solid #3498db;
+        }
+        .info-label {
+            font-weight: 600;
+            color: #555;
+            font-size: 13px;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+        }
+        .info-label i {
+            margin-right: 8px;
+            width: 20px;
+        }
+        .info-value {
+            font-size: 15px;
+            color: #333;
+            padding-left: 28px;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 6px 15px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: bold;
+        }
+        .status-good { background: #d4edda; color: #155724; }
+        .status-maintenance { background: #fff3cd; color: #856404; }
+        .status-bad { background: #f8d7da; color: #721c24; }
+        .price {
+            color: #e74c3c;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        .note-box {
+            background: #e8f4ff;
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            border-left: 4px solid #2196f3;
+        }
+        .loading {
             text-align: center;
-            padding: 50px;
+            padding: 40px;
             color: #666;
         }
-        .btn {
-            display: inline-block;
-            padding: 10px 20px;
-            background: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 10px 5px;
-            cursor: pointer;
+        .error {
+            text-align: center;
+            padding: 40px;
+            color: #e74c3c;
         }
-        .btn:hover { background: #0056b3; }
-        .error { color: red; padding: 20px; text-align: center; }
+        .buttons {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+        }
+        .btn {
+            padding: 10px 25px;
+            margin: 0 10px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .btn-print { background: #007bff; color: white; }
+        .btn-back { background: #6c757d; color: white; }
+        .btn-share { background: #28a745; color: white; }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 13px;
+        }
+        @media print {
+            .buttons { display: none; }
+            body { background: white; }
+            .container { box-shadow: none; }
+        }
+        @media (max-width: 768px) {
+            .container { padding: 15px; }
+            .info-grid { grid-template-columns: 1fr; }
+            .btn { display: block; width: 100%; margin: 10px 0; }
+        }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🏥 THÔNG TIN THIẾT BỊ Y TẾ</h1>
-            <p>Bệnh viện Ninh Thuận</p>
+            <div class="hospital-name">🏥 BỆNH VIỆN NINH THUẬN</div>
+            <div class="subtitle">Hệ thống Quản lý Thiết bị Y tế</div>
         </div>
         
-        <div id="deviceData" class="device-info">
-            <!-- Device info will be displayed here -->
+        <div id="loading" class="loading">
+            <div style="font-size: 40px; margin-bottom: 15px;">
+                <i class="fas fa-spinner fa-spin"></i>
+            </div>
+            <p>Đang tải thông tin thiết bị...</p>
         </div>
         
-        <div style="text-align: center; margin-top: 30px;">
-            <button onclick="window.print()" class="btn">🖨️ In trang</button>
-            <button onclick="window.history.back()" class="btn">↩️ Quay lại</button>
+        <div id="error" class="error" style="display: none;">
+            <div style="font-size: 50px; margin-bottom: 15px;">
+                <i class="fas fa-exclamation-triangle"></i>
+            </div>
+            <h3>Không tìm thấy thông tin</h3>
+            <p>Vui lòng kiểm tra lại QR Code</p>
+            <button class="btn btn-back" onclick="history.back()" style="margin-top: 15px;">
+                <i class="fas fa-arrow-left"></i> Quay lại
+            </button>
+        </div>
+        
+        <div id="device-info" style="display: none;">
+            <!-- Device info will be loaded here -->
+        </div>
+        
+        <div class="buttons">
+            <button class="btn btn-print" onclick="window.print()">
+                <i class="fas fa-print"></i> In thông tin
+            </button>
+            <button class="btn btn-share" onclick="shareDevice()" id="share-btn" style="display: none;">
+                <i class="fas fa-share-alt"></i> Chia sẻ
+            </button>
+            <button class="btn btn-back" onclick="history.back()">
+                <i class="fas fa-arrow-left"></i> Quay lại
+            </button>
+        </div>
+        
+        <div class="footer">
+            <p>© 2024 - Bệnh viện Ninh Thuận</p>
+            <p>Thông tin được cập nhật lần cuối: <span id="update-time"></span></p>
         </div>
     </div>
 
     <script>
-        // THÊM HÀM DEBUG VÀO ĐẦU SCRIPT
-function debugHash() {
-    console.log('=== DEBUG HASH INFO ===');
-    console.log('Full URL:', window.location.href);
-    console.log('Hash:', window.location.hash);
-    console.log('Hash length:', window.location.hash.length);
-    console.log('Hash content:', window.location.hash.substring(1));
-    console.log('========================');
-}
+        // Hàm decode URL parameter
+        function decodeParam(param) {
+            if (!param) return '';
+            return decodeURIComponent(param.replace(/\+/g, ' '));
+        }
 
-// SỬA HÀM getDeviceDataFromHash
-function getDeviceDataFromHash() {
-    debugHash(); // Thêm dòng này để debug
-    
-    try {
-        const hash = window.location.hash;
-        
-        if (!hash || hash === '#') {
-            console.log('Empty hash, showing welcome page');
-            return null;
+        // Format tiền Việt Nam
+        function formatCurrency(amount) {
+            amount = parseFloat(amount) || 0;
+            return amount.toLocaleString('vi-VN', {
+                style: 'currency',
+                currency: 'VND'
+            });
         }
-        
-        // Lấy phần sau dấu #
-        const hashContent = hash.substring(1);
-        console.log('Hash content to decode:', hashContent);
-        
-        if (!hashContent || hashContent.trim() === '') {
-            console.log('Empty hash content');
-            return null;
+
+        // Lấy class cho status
+        function getStatusClass(status) {
+            status = (status || '').toLowerCase();
+            if (status.includes('dùng') || status.includes('tốt')) return 'status-good';
+            if (status.includes('bảo trì') || status.includes('sửa')) return 'status-maintenance';
+            if (status.includes('hỏng') || status.includes('ngừng')) return 'status-bad';
+            return 'status-good';
         }
-        
-        // Kiểm tra xem có phải base64 không
-        if (hashContent.length < 10) {
-            console.log('Hash too short, not valid base64');
-            return null;
+
+        // Định dạng ngày
+        function formatDate(timestamp) {
+            const date = new Date(parseInt(timestamp));
+            return date.toLocaleDateString('vi-VN', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
         }
-        
-        // Thử decode
-        try {
-            // Sử dụng cách decode an toàn
-            const decoded = decodeURIComponent(escape(atob(hashContent)));
-            console.log('Successfully decoded:', decoded.substring(0, 100) + '...');
+
+        // Hiển thị thông tin thiết bị
+        function displayDevice(data) {
+            const container = document.getElementById('device-info');
             
-            const device = JSON.parse(decoded);
-            console.log('Parsed device:', device);
+            // Tính toán giá trị
+            const quantity = parseInt(data.q) || 1;
+            const unitPrice = parseFloat(data.p) || 0;
+            const totalValue = unitPrice * quantity;
             
-            return device;
-            
-        } catch (decodeError) {
-            console.error('Decode error:', decodeError);
-            
-            // Thử decode trực tiếp không qua escape (cho đơn giản)
-            try {
-                const decoded = atob(hashContent);
-                console.log('Direct decode (no escape):', decoded);
-                return JSON.parse(decoded);
-            } catch (simpleError) {
-                console.error('Simple decode also failed:', simpleError);
-                return null;
-            }
-        }
-        
-    } catch (error) {
-        console.error('Error in getDeviceDataFromHash:', error);
-        return null;
-    }
-}
-        function loadDeviceData() {
-            const container = document.getElementById('deviceData');
-            const hash = window.location.hash;
-            
-            console.log('Hash:', hash);
-            
-            if (!hash || hash === '#') {
-                container.innerHTML = `
-                    <div class="no-data">
-                        <h3>📱 Quét QR Code để xem thông tin thiết bị</h3>
-                        <p>Vui lòng quét mã QR từ hệ thống quản lý thiết bị</p>
+            const html = `
+                <div class="device-card">
+                    <div class="device-name">${decodeParam(data.n)}</div>
+                    <div class="device-id">
+                        <i class="fas fa-hashtag"></i> Mã thiết bị: ${data.id}
                     </div>
-                `;
-                return;
-            }
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <span class="status-badge ${getStatusClass(decodeParam(data.s))}">
+                            ${decodeParam(data.s) || 'Đang sử dụng'}
+                        </span>
+                        <span style="background: rgba(255,255,255,0.2); padding: 5px 12px; border-radius: 15px;">
+                            <i class="fas fa-boxes"></i> ${quantity} ${decodeParam(data.dv) || 'cái'}
+                        </span>
+                    </div>
+                </div>
+                
+                <div class="info-grid">
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-cube"></i> Model:
+                        </div>
+                        <div class="info-value">${decodeParam(data.m) || 'Không có thông tin'}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-industry"></i> Nhà sản xuất:
+                        </div>
+                        <div class="info-value">${decodeParam(data.sx) || 'Không có thông tin'}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-calendar-alt"></i> Năm sản xuất:
+                        </div>
+                        <div class="info-value">${data.y || 'Không có thông tin'}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-money-bill-wave"></i> Đơn giá:
+                        </div>
+                        <div class="info-value price">${formatCurrency(unitPrice)}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-calculator"></i> Thành tiền:
+                        </div>
+                        <div class="info-value price">${formatCurrency(totalValue)}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-building"></i> Phòng ban:
+                        </div>
+                        <div class="info-value">${decodeParam(data.pb) || 'Chưa phân bổ'}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-user-tie"></i> Người quản lý:
+                        </div>
+                        <div class="info-value">${decodeParam(data.nv) || 'Chưa phân công'}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-tags"></i> Phân loại:
+                        </div>
+                        <div class="info-value">${decodeParam(data.pl) || 'Chưa phân loại'}</div>
+                    </div>
+                    
+                    <div class="info-item">
+                        <div class="info-label">
+                            <i class="fas fa-barcode"></i> Serial Number:
+                        </div>
+                        <div class="info-value">${data.sn || 'Không có'}</div>
+                    </div>
+                </div>
+                
+                ${data.gc ? `
+                <div class="note-box">
+                    <div class="info-label">
+                        <i class="fas fa-sticky-note"></i> Ghi chú:
+                    </div>
+                    <div class="info-value">
+                        ${decodeParam(data.gc)}
+                    </div>
+                </div>
+                ` : ''}
+                
+                <div style="margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; font-size: 12px; color: #666;">
+                    <i class="fas fa-info-circle"></i>
+                    <strong>Thông tin QR Code:</strong><br>
+                    • Thời gian tạo: ${formatDate(data.t)}<br>
+                    • Truy cập lần cuối: ${new Date().toLocaleString('vi-VN')}<br>
+                    • Mã thiết bị: ${data.id}
+                </div>
+            `;
             
+            container.innerHTML = html;
+            container.style.display = 'block';
+            
+            // Cập nhật tiêu đề trang
+            document.title = `${decodeParam(data.n)} - Thiết bị ${data.id}`;
+            
+            // Cập nhật thời gian
+            document.getElementById('update-time').textContent = new Date().toLocaleString('vi-VN');
+            
+            // Hiển thị nút share nếu browser hỗ trợ
+            if (navigator.share) {
+                document.getElementById('share-btn').style.display = 'inline-block';
+            }
+        }
+
+        // Chia sẻ thông tin
+        function shareDevice() {
+            if (navigator.share) {
+                navigator.share({
+                    title: document.title,
+                    text: 'Thông tin thiết bị y tế',
+                    url: window.location.href
+                });
+            }
+        }
+
+        // Hàm chính: load dữ liệu
+        async function loadDeviceData() {
             try {
-                // Lấy base64 từ hash (bỏ dấu #)
-                const base64 = hash.substring(1);
-                console.log('Base64:', base64);
+                const loadingEl = document.getElementById('loading');
+                const errorEl = document.getElementById('error');
                 
-                // Decode base64
-                const jsonStr = atob(base64);
-                console.log('JSON string:', jsonStr);
+                // Lấy query parameters từ URL
+                const urlParams = new URLSearchParams(window.location.search);
                 
-                // Parse JSON
-                const device = JSON.parse(jsonStr);
-                console.log('Device data:', device);
+                if (urlParams.toString() === '') {
+                    // Thử đọc từ hash nếu có
+                    if (window.location.hash && window.location.hash.length > 1) {
+                        try {
+                            const hashData = window.location.hash.substring(1);
+                            const jsonStr = atob(hashData);
+                            const device = JSON.parse(jsonStr);
+                            displayDevice(device);
+                            loadingEl.style.display = 'none';
+                            return;
+                        } catch (e) {
+                            console.log('Cannot decode hash:', e);
+                        }
+                    }
+                    
+                    // Không có dữ liệu
+                    loadingEl.style.display = 'none';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                
+                // Chuyển URL params thành object
+                const deviceData = {};
+                for (const [key, value] of urlParams.entries()) {
+                    deviceData[key] = value;
+                }
+                
+                console.log('Device data loaded:', deviceData);
                 
                 // Hiển thị thông tin
-                const html = `
-                    <h2>${escapeHtml(device.name)}</h2>
-                    <div class="info-row">
-                        <div class="label">Mã thiết bị:</div>
-                        <div class="value">${device.id}</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="label">Model:</div>
-                        <div class="value">${escapeHtml(device.model || 'N/A')}</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="label">Nhà sản xuất:</div>
-                        <div class="value">${escapeHtml(device.manufacturer || 'N/A')}</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="label">Số lượng:</div>
-                        <div class="value">${device.quantity} ${device.unit || 'cái'}</div>
-                    </div>
-                    <div class="info-row">
-                        <div class="label">Tình trạng:</div>
-                        <div class="value">${device.status || 'N/A'}</div>
-                    </div>
-                    ${device.department ? `
-                    <div class="info-row">
-                        <div class="label">Phòng ban:</div>
-                        <div class="value">${escapeHtml(device.department)}</div>
-                    </div>
-                    ` : ''}
-                    ${device.note ? `
-                    <div class="info-row">
-                        <div class="label">Ghi chú:</div>
-                        <div class="value">${escapeHtml(device.note)}</div>
-                    </div>
-                    ` : ''}
-                `;
-                
-                container.innerHTML = html;
+                displayDevice(deviceData);
+                loadingEl.style.display = 'none';
                 
             } catch (error) {
-                console.error('Error:', error);
-                container.innerHTML = `
-                    <div class="error">
-                        <h3>❌ Lỗi khi đọc thông tin</h3>
-                        <p>QR Code không hợp lệ hoặc đã hết hạn</p>
-                        <p>Lỗi: ${error.message}</p>
-                    </div>
-                `;
+                console.error('Error loading device:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
             }
         }
+
+        // Chạy khi trang load xong
+        document.addEventListener('DOMContentLoaded', loadDeviceData);
         
-        function escapeHtml(text) {
-            if (!text) return '';
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        // Thêm service worker cho offline (tùy chọn)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .catch(err => console.log('ServiceWorker failed:', err));
+            });
         }
-        
-        // Chạy khi trang load
-        window.addEventListener('load', loadDeviceData);
-        window.addEventListener('hashchange', loadDeviceData);
-        
-        // Log để debug
-        console.log('QR Display Page Loaded');
-        console.log('Test URL: https://datkep92.github.io/qlvt/qr-display.html#eyJpZCI6MSwibmFtZSI6Ik1heSB0aGlldCBiYSIsIm1vZGVsIjoiWDEwMCIsInF1YW50aXR5IjozLCJzdGF0dXMiOiJEYW5nIHN1IGR1bmcifQ==');
     </script>
 </body>
 </html>
