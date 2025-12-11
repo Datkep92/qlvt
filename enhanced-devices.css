@@ -129,16 +129,7 @@ html, body {
     min-height: 44px; /* Tối ưu touch */
 }
 
-.btn-secondary {
-    background: #6c757d;
-    color: white;
-    border: none;
-    padding: 8px 14px;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    min-height: 40px;
-}
+
 
 .btn-action {
     background: transparent;
@@ -646,11 +637,7 @@ html, body {
         font-size: 0.8rem;
     }
     
-    .btn-primary,
-    .btn-secondary {
-        padding: 10px 12px;
-        font-size: 0.85rem;
-    }
+
     
     .modal-body {
         padding: 16px;

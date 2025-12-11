@@ -1,0 +1,1241 @@
+/* SỬA LẠI CSS ĐỂ GIAO DIỆN MƯỢT MÀ HƠN */
+
+/* ========== GROUP VIEW HIỆN ĐẠI & TỐI ƯU HÓA ========== */
+
+/* Nhóm thiết bị - COMPACT VERSION */
+.compact-group-item {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 12px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    /* Cảm giác phân cấp rõ ràng */
+    margin-left: 15px;
+    border-left: 4px solid #bec5cc; /* Độ dày hơn một chút */
+}
+
+/* Hiệu ứng khi nhóm được mở */
+.compact-group-item.expanded {
+    border-left-color: #007bff; /* Màu xanh nổi bật */
+    box-shadow: 0 4px 15px rgba(0, 123, 255, 0.1);
+    margin-bottom: 15px;
+}
+
+.group-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f9fa;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-bottom: 1px solid transparent;
+}
+
+.group-header-compact:hover {
+    background: #e9ecef;
+}
+
+.group-header-compact.expanded {
+    border-bottom-color: #cfe2ff; /* Màu sáng hơn */
+    background: linear-gradient(to right, #e3f2fd, #f3f8ff); /* Gradient nhẹ */
+}
+
+.group-checkbox {
+    margin-right: 12px;
+}
+
+.group-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.group-info-compact {
+    flex: 1;
+}
+
+.group-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.group-icon-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.group-icon {
+    font-size: 20px;
+    color: #495057; /* Màu mặc định */
+    transition: color 0.3s;
+}
+
+.group-header-compact.expanded .group-icon {
+    color: #007bff;
+    animation: pulse 1.5s infinite; /* Hiệu ứng nhẹ hơn */
+}
+
+.group-name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+    transition: color 0.3s;
+}
+
+.group-header-compact.expanded .group-name {
+    color: #0056b3;
+    font-weight: 700;
+}
+
+.group-toggle {
+    font-size: 14px; /* Lớn hơn một chút */
+    color: #6c757d;
+    margin-left: 15px;
+    transition: transform 0.3s ease;
+}
+
+.group-header-compact.expanded .group-toggle {
+    transform: rotate(180deg);
+    color: #007bff;
+}
+
+.group-stats-compact {
+    display: flex;
+    gap: 10px; /* Giảm gap */
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px; /* Giảm padding */
+    background: #e9ecef;
+    border-radius: 12px;
+    font-size: 12px;
+    color: #495057;
+}
+
+.stat-badge.price {
+    background: #d4edda;
+    color: #155724;
+}
+
+.group-actions-compact {
+    display: flex;
+    gap: 8px; /* Tăng gap */
+    margin-left: 15px;
+}
+
+.action-btn {
+    padding: 6px 12px;
+    background: #6c757d; /* Màu xám hiện đại */
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.3s, transform 0.2s;
+}
+
+.action-btn:hover {
+    background: #495057;
+    transform: translateY(-1px);
+}
+
+.action-btn.delete {
+    background: #dc3545;
+}
+
+.action-btn.delete:hover {
+    background: #c82333;
+}
+
+/* Năm - COMPACT VERSION */
+.year-item-compact {
+    /* Đã được điều chỉnh để không bị trùng lặp */
+    background: #f8f9fa;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    margin-left: 20px; /* Thụt vào so với group */
+    border-left: 3px solid #ced4da;
+    transition: all 0.3s ease;
+}
+
+.year-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    background: #dadcde;
+    transition: all 0.3s ease;
+}
+
+.year-header-compact:hover {
+    background: #e9ecef;
+    transform: translateX(1px);
+}
+
+.year-item-compact.expanded {
+    border-left-color: #007bff;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+    margin-bottom: 10px;
+}
+
+.year-header-compact.expanded {
+    background: linear-gradient(to right, #e3f2fd, #f3f8ff);
+    border-bottom: 1px solid #cfe2ff;
+}
+
+.year-checkbox {
+    margin-right: 10px;
+}
+
+.year-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.year-info-compact {
+    flex: 1;
+}
+
+.year-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px; /* Giảm margin */
+}
+
+.year-icon-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.year-icon {
+    font-size: 16px;
+    color: #6c757d;
+}
+
+.year-item-compact.expanded .year-icon {
+    color: #007bff;
+}
+
+.year-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.year-item-compact.expanded .year-title {
+    color: #0056b3;
+    font-weight: 700;
+}
+
+.model-badge {
+    background: #6c757d;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: normal;
+}
+
+.year-stats-compact {
+    display: flex;
+    gap: 8px; /* Giảm gap */
+    flex-wrap: wrap;
+}
+
+.stat-badge.small {
+    padding: 2px 6px;
+    font-size: 11px;
+}
+
+.year-actions-compact {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+/* Thiết bị trong năm - COMPACT VERSION */
+.year-devices-list {
+    margin-left: 0; /* Đã có margin ở year-item-compact */
+    padding: 8px 12px;
+    background: white;
+    /* Transition cho việc mở/đóng mượt mà */
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.5s ease-out, opacity 0.4s ease-out;
+}
+
+.year-item-compact.expanded .year-devices-list {
+    max-height: 2000px; /* Đủ lớn để chứa nội dung */
+    opacity: 1;
+    padding-top: 12px;
+}
+
+.device-item-year-compact {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 8px; /* Tăng margin */
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    transition: all 0.2s;
+}
+
+.device-item-year-compact:hover {
+    background: #f8f9fa;
+    border-color: #adb5bd;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.device-item-year-compact.selected {
+    background: linear-gradient(to right, #e3f2fd, #d1e7ff);
+    border-color: #007bff;
+}
+
+.device-item-year-compact.split-device {
+    border-left: 4px solid #28a745;
+    background: linear-gradient(to right, #f8fff9, #e8f8ec);
+}
+
+.device-checkbox-year {
+    margin-right: 10px;
+}
+
+.device-checkbox-year input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.device-info-year {
+    flex: 1;
+    cursor: pointer;
+}
+
+.device-model-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.device-model {
+    font-weight: 500;
+    color: #343a40; /* Màu tối hơn */
+    font-size: 14px; /* Lớn hơn một chút */
+}
+
+.device-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+}
+
+.device-status.success { background: #d4edda; color: #155724; }
+.device-status.warning { background: #fff3cd; color: #856404; }
+.device-status.danger { background: #f8d7da; color: #721c24; }
+.device-status.secondary { background: #e2e3e5; color: #383d41; }
+
+.device-basic-year {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.device-extra-year {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.detail-icon {
+    font-size: 12px;
+    color: #adb5bd;
+}
+
+.detail-text {
+    font-size: 12px;
+}
+
+.device-actions-year {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+/* Phân trang ẩn khi group view */
+.group-view-container ~ .pagination-section {
+    display: none !important;
+}
+
+/* Highlight thiết bị mới */
+@keyframes highlightPulse {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+.highlight-new {
+    animation: highlightPulse 2s ease-out;
+}
+
+/* Animation cho việc mở/đóng */
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* Phong cách đặc biệt cho năm "Không xác định" */
+.year-item-compact[data-year="Không xác định"] {
+    border-left-color: #6c757d;
+}
+
+.year-item-compact[data-year="Không xác định"] .year-header-compact {
+    background: #e9ecef;
+}
+
+.year-item-compact[data-year="Không xác định"].expanded .year-header-compact {
+    background: linear-gradient(to right, #e2e6ea, #f1f3f5);
+    border-bottom-color: #dee2e6;
+}
+
+.year-item-compact[data-year="Không xác định"].expanded .year-title {
+    color: #495057;
+}
+
+/* Style cho checkbox indeterminate state */
+.group-checkbox input[type="checkbox"][data-indeterminate="true"],
+.year-checkbox input[type="checkbox"][data-indeterminate="true"],
+.device-checkbox-year input[type="checkbox"][data-indeterminate="true"] {
+    opacity: 1; /* Giữ nguyên opacity */
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    display: inline-block;
+}
+
+.group-checkbox input[type="checkbox"][data-indeterminate="true"]::before,
+.year-checkbox input[type="checkbox"][data-indeterminate="true"]::before,
+.device-checkbox-year input[type="checkbox"][data-indeterminate="true"]::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    height: 2px;
+    background-color: #6c757d;
+    border-radius: 1px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .group-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .group-buttons {
+        justify-content: flex-start;
+    }
+    
+    .device-basic-year,
+    .device-extra-year {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .group-stats-compact {
+        gap: 8px;
+    }
+
+    .compact-group-item {
+        margin-left: 0;
+        margin-right: 0;
+    }
+
+    .year-item-compact {
+        margin-left: 10px;
+        margin-right: 0;
+    }
+}
+
+/* ========== GROUP VIEW HIỆN ĐẠI - TỐI ƯU HIỆU SUẤT ========== */
+
+/* Nhóm thiết bị - COMPACT VERSION */
+.compact-group-item {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+}
+
+.group-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f9fa;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.group-header-compact:hover {
+    background: #e9ecef;
+}
+
+.group-checkbox {
+    margin-right: 12px;
+}
+
+.group-checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.group-info-compact {
+    flex: 1;
+}
+
+.group-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.group-icon-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.group-icon {
+    font-size: 20px;
+    transition: transform 0.2s ease;
+}
+
+.group-name {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.group-stats-compact {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.stat-badge {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px;
+    background: #e9ecef;
+    border-radius: 12px;
+    font-size: 13px;
+}
+
+.stat-badge.price {
+    background: #d4edda;
+    color: #155724;
+}
+
+.group-actions-compact {
+    display: flex;
+    gap: 5px;
+    margin-left: 15px;
+}
+
+.action-btn {
+    padding: 6px 12px;
+    background: #808891;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: background 0.15s ease;
+}
+
+.action-btn:hover {
+    background: #737678;
+}
+
+.action-btn.small {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.action-btn.tiny {
+    padding: 3px 6px;
+    font-size: 10px;
+}
+
+.action-btn.delete {
+    background: #dc3545;
+}
+
+.action-btn.delete:hover {
+    background: #c82333;
+}
+
+/* Năm - COMPACT VERSION */
+.year-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+    background: #f1f3f4;
+}
+
+.year-header-compact:hover {
+    background: #e9ecef;
+}
+
+.year-checkbox {
+    margin-right: 10px;
+}
+
+.year-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+}
+
+.year-info-compact {
+    flex: 1;
+}
+
+.year-title-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+
+.year-icon-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.year-icon {
+    font-size: 16px;
+    transition: transform 0.2s ease;
+}
+
+.year-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.model-badge {
+    background: #6c757d;
+    color: white;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: normal;
+}
+
+.year-stats-compact {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.stat-badge.small {
+    padding: 2px 8px;
+    font-size: 12px;
+}
+
+.year-actions-compact {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+/* Thiết bị trong năm - COMPACT VERSION */
+.year-devices-list {
+    margin-left: 40px;
+    padding: 8px;
+    background: #fafafa;
+    display: none;
+}
+
+.year-item-compact.expanded .year-devices-list {
+    display: block;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.device-item-year-compact {
+    display: flex;
+    align-items: center;
+    padding: 8px 10px;
+    margin-bottom: 6px;
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    transition: background 0.15s ease;
+}
+
+.device-item-year-compact:hover {
+    background: #f8f9fa;
+}
+
+.device-item-year-compact.selected {
+    background: #e3f2fd;
+    border-color: #007bff;
+}
+
+.device-item-year-compact.split-device {
+    border-left: 3px solid #28a745;
+}
+
+.device-checkbox-year {
+    margin-right: 10px;
+}
+
+.device-checkbox-year input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.device-info-year {
+    flex: 1;
+    cursor: pointer;
+}
+
+.device-model-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.device-model {
+    font-weight: 500;
+    color: #495057;
+    font-size: 13px;
+}
+
+.device-status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+}
+
+.device-status.success { background: #d4edda; color: #155724; }
+.device-status.warning { background: #fff3cd; color: #856404; }
+.device-status.danger { background: #f8d7da; color: #721c24; }
+.device-status.secondary { background: #e2e3e5; color: #383d41; }
+
+.device-basic-year {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 4px;
+}
+
+.device-extra-year {
+    display: flex;
+    gap: 15px;
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.detail-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.detail-icon {
+    font-size: 12px;
+}
+
+.detail-text {
+    font-size: 12px;
+}
+
+.device-actions-year {
+    display: flex;
+    gap: 5px;
+    margin-left: 10px;
+}
+
+/* Phân trang ẩn khi group view */
+.group-view-container ~ .pagination-section {
+    display: none !important;
+}
+
+/* Highlight thiết bị mới */
+@keyframes highlightPulse {
+    0% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(40, 167, 69, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(40, 167, 69, 0); }
+}
+
+.highlight-new {
+    animation: highlightPulse 2s ease-out;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .group-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .group-buttons {
+        justify-content: flex-start;
+    }
+    
+    .device-basic-year,
+    .device-extra-year {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    
+    .group-stats-compact {
+        gap: 8px;
+    }
+    
+    .year-devices-list {
+        margin-left: 20px;
+        padding: 6px;
+    }
+}
+
+/* ========== TỐI ƯU HIỆU ỨNG MỞ/ĐÓNG ========== */
+
+/* Khi nhóm được mở */
+.compact-group-item.expanded {
+    background: #f8f9fa;
+    border-left: 3px solid #007bff;
+    margin-bottom: 12px;
+}
+
+.compact-group-item.expanded .group-header-compact {
+    background: #e3f2fd;
+}
+
+.compact-group-item.expanded .group-icon {
+    transform: rotate(90deg);
+    color: #007bff;
+}
+
+.compact-group-item.expanded .group-name {
+    color: #0056b3;
+}
+
+/* Tự động mở tất cả năm khi nhóm mở */
+.compact-group-item.expanded .year-item-compact {
+    display: block;
+    max-height: 1000px;
+    opacity: 1;
+    margin: 8px 0;
+    animation: slideIn 0.25s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateX(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+/* Khi năm được mở */
+.year-item-compact.expanded {
+    background: #f1f8ff;
+    border-left: 2px solid #007bff;
+}
+
+.year-item-compact.expanded .year-header-compact {
+    background: #e3f2fd;
+}
+
+.year-item-compact.expanded .year-icon {
+    transform: rotate(90deg);
+    color: #007bff;
+}
+
+.year-item-compact.expanded .year-title {
+    color: #0056b3;
+}
+
+/* Màu nền cho year-devices-list khi mở */
+.year-item-compact.expanded .year-devices-list {
+    background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+    border-top: 1px solid #e3e8f0;
+    padding: 12px;
+    margin-top: 4px;
+    border-radius: 6px;
+}
+
+/* Màu xen kẽ cho thiết bị */
+.year-devices-list .device-item-year-compact:nth-child(odd) {
+    background: #ffffff;
+}
+
+.year-devices-list .device-item-year-compact:nth-child(even) {
+    background: #f8fafc;
+}
+
+.year-devices-list .device-item-year-compact:hover {
+    background: #e3f2fd !important;
+}
+
+/* Style cho checkbox indeterminate state */
+input[data-indeterminate="true"] {
+    position: relative;
+}
+
+input[data-indeterminate="true"]::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 2px;
+    background-color: #6c757d;
+    border-radius: 1px;
+}
+
+/* Tối ưu hiệu ứng cho thiết bị được chọn */
+.device-item-year-compact.selected {
+    animation: selectedPulse 1.5s ease;
+}
+
+@keyframes selectedPulse {
+    0% { background-color: #e3f2fd; }
+    50% { background-color: #bbdefb; }
+    100% { background-color: #e3f2fd; }
+}
+
+/* Giảm độ phức tạp của transition */
+.compact-group-item,
+.year-item-compact,
+.device-item-year-compact {
+    will-change: transform, opacity;
+    backface-visibility: hidden;
+}
+
+/* Loại bỏ các hiệu ứng tốn tài nguyên */
+.year-item-compact.expanded .year-devices-list {
+    animation: fadeIn 0.2s ease;
+}
+
+/* Đơn giản hóa hiệu ứng hover */
+.group-header-compact:hover,
+.year-header-compact:hover {
+    transform: translateY(-1px);
+    transition: transform 0.15s ease, background 0.15s ease;
+}
+
+/* Tối ưu hiển thị cho nhiều năm */
+.compact-group-item.expanded .years-list {
+    display: block !important;
+}
+
+/* Đảm bảo smooth scrolling khi mở nhiều content */
+.compact-group-item,
+.year-item-compact {
+    contain: content;
+}
+
+/* SỬA LẠI CSS: THAY ĐỔI MÀU NỀN CỦA TOÀN BỘ ITEM KHI BUNG RA */
+
+/* ========== CẤP ĐỘ GROUP (H1) ========== */
+.compact-group-item {
+    background: white;
+    border: 1px solid #e0e6ed;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+    /* Phân cấp H1 */
+    margin-left: 0;
+    border-left: 5px solid #6c757d;
+}
+
+/* THAY ĐỔI MÀU NỀN TOÀN BỘ ITEM KHI GROUP MỞ RỘNG */
+.compact-group-item.expanded {
+    border-left-color: #007bff;
+    box-shadow: 0 6px 20px rgba(0, 123, 255, 0.15);
+    /* Nền nhẹ cho toàn bộ Group Item đang mở */
+    background: #eef7ff; /* Màu nền rất nhẹ, hơi xanh */
+}
+
+.group-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 12px 15px;
+    background: #f8f9fa; /* Nền header mặc định */
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border-bottom: 1px solid transparent;
+}
+
+/* Đảm bảo header vẫn nổi bật trên nền mới khi mở */
+.group-header-compact.expanded {
+    border-bottom-color: #cfe2ff;
+    background: linear-gradient(to right, #dbeaff, #eef7ff); /* Gradient nổi bật */
+}
+
+.group-checkbox {
+    margin-right: 12px;
+}
+
+.group-icon-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex: 1; 
+}
+
+.group-name {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.group-stats-compact {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-left: 20px; 
+}
+
+.group-actions-compact {
+    display: flex;
+    gap: 8px;
+    margin-left: 20px;
+}
+
+/* ========== CẤP ĐỘ NĂM (H2) ========== */
+.year-item-compact {
+    background: #ffffff; /* Nền mặc định bên trong Group */
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 10px;
+    /* Phân cấp H2: Thụt vào và viền khác */
+    margin-left: 30px; 
+    border-left: 3px solid #ced4da;
+    transition: all 0.3s ease;
+}
+
+/* THAY ĐỔI MÀU NỀN TOÀN BỘ ITEM KHI NĂM MỞ RỘNG */
+.year-item-compact.expanded {
+    border: 1px solid #c8dcf7; /* Viền bao quanh nổi bật hơn */
+    border-left-color: #007bff;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    /* Nền nổi bật cho toàn bộ Year Item đang mở */
+    background: #f3f9ff; /* Màu nền nhẹ hơn Group, tạo sự phân biệt */
+}
+
+.year-header-compact {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    cursor: pointer;
+    background: #e9ecef;
+    transition: all 0.3s ease;
+}
+
+.year-header-compact.expanded {
+    background: linear-gradient(to right, #e3f2fd, #f7f9ff);
+    border-bottom: 1px solid #cfe2ff;
+}
+
+.year-icon-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1; 
+}
+
+.year-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.year-stats-compact {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-left: 15px;
+}
+
+.year-actions-compact {
+    display: flex;
+    gap: 5px;
+    margin-left: 15px;
+}
+
+/* ========== CẤP ĐỘ THIẾT BỊ (H3) - NỘI DUNG BÊN TRONG NĂM ========== */
+.year-devices-list {
+    padding: 12px 15px;
+    /* Đảm bảo nền của list thiết bị khớp với nền của Year Item đang mở */
+    background: transparent; 
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transition: max-height 0.5s ease-out, opacity 0.4s ease-out;
+}
+
+.year-item-compact.expanded .year-devices-list {
+    max-height: 2000px;
+    opacity: 1;
+    /* Đã dùng nền của year-item-compact.expanded, không cần nền riêng */
+    border-top: 1px solid #e9ecef;
+}
+
+.device-item-year-compact {
+    display: flex;
+    align-items: center;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+    /* Background: white để nổi bật trên nền #f3f9ff của Year Item */
+    background: white; 
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    transition: all 0.2s;
+    margin-left: 15px; 
+}
+
+.device-item-year-compact:hover {
+    background: #f0f7ff; /* Nền hover nhẹ nhàng */
+    border-color: #adb5bd;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.device-item-year-compact.selected {
+    border: 1px solid #007bff;
+    background: linear-gradient(to right, #e3f2fd, #d1e7ff);
+}
+
+.device-info-year {
+    flex: 1;
+    cursor: pointer;
+}
+
+.device-model {
+    font-size: 14px;
+    font-weight: 600;
+    color: #343a40;
+}
+
+/* Các đoạn CSS phụ khác đã được giữ nguyên */
+.stat-badge {
+    padding: 3px 8px;
+    font-size: 12px;
+}
+
+.action-btn {
+    padding: 6px 12px;
+    font-size: 12px;
+}
+
+/* Styles cho checkbox indeterminate */
+.group-checkbox input[type="checkbox"][data-indeterminate="true"],
+.year-checkbox input[type="checkbox"][data-indeterminate="true"],
+.device-checkbox-year input[type="checkbox"][data-indeterminate="true"] {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+    appearance: none;
+    -webkit-appearance: none;
+    position: relative;
+    display: inline-block;
+}
+
+.group-checkbox input[type="checkbox"][data-indeterminate="true"]::before,
+.year-checkbox input[type="checkbox"][data-indeterminate="true"]::before,
+.device-checkbox-year input[type="checkbox"][data-indeterminate="true"]::before {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60%;
+    height: 2px;
+    background-color: #6c757d;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .compact-group-item {
+        margin-left: 0;
+    }
+
+    .year-item-compact {
+        margin-left: 15px;
+    }
+    
+    .device-item-year-compact {
+        margin-left: 0;
+    }
+}

@@ -1,4 +1,3 @@
-// quanly.js - Quản lý dữ liệu thiết bị
 class QuanLyManager {
     constructor() {
         this.moduleName = "QuanLyManager";
@@ -7,17 +6,21 @@ class QuanLyManager {
         this.currentPage = 1;
         this.itemsPerPage = 10;
         this.selectedDevices = new Set();
+        this.currentFilters = {}; // Lưu filters hiện tại
         this.init();
-        this.applyFiltersDebounced = this.debounce(this.applyFiltersImmediate.bind(this), 300);
     }
 
     init() {
+        // QUAN TRỌNG: Chỉ lắng nghe filter:applied từ locManager
+        AppEvents.on('filter:applied', (filters) => {
+            console.log('QuanLyManager: Received filters', filters);
+            this.currentFilters = filters || {};
+            this.applyFilters();
+        });
+        AppEvents.on('action:toggleSelectAll', (isChecked) => {
+        this.handleSelectAllFromFooter(isChecked);
+    });
         AppEvents.on('app:ready', () => this.setup());
-
-        AppEvents.on('filter:apply', (filters) => this.applyFilters(filters));
-        AppEvents.on('filter:clear', () => this.clearFilters());
-    AppEvents.on('data:getStaff', (data) => this.getStaff(data));
-
         AppEvents.on('data:refresh', () => this.loadDevices());
         AppEvents.on('data:refreshView', () => this.refreshView());
         AppEvents.on('data:changePage', (page) => this.changePage(page));
@@ -27,27 +30,40 @@ class QuanLyManager {
             if (data.callback) data.callback(devices);
         });
         AppEvents.on('data:getDevice', (data) => this.getDevice(data));
+        AppEvents.on('data:getStaff', (data) => this.getStaff(data));
 
         // CRUD
         AppEvents.on('action:addDevice', () => this.showAddDevice());
         AppEvents.on('action:updateDevice', (data) => this.updateDevice(data));
         AppEvents.on('action:deleteDevice', (id) => this.deleteDevice(id));
-        AppEvents.on('action:splitDevice', (id) => this.splitDevice(id));
+        AppEvents.on('action:splitDevice', (id, options) => this.splitDevice(id, options)); // Đã sửa để nhận options
 
         // Bulk
         AppEvents.on('bulk:toggleAll', (checked) => this.toggleSelectAll(checked));
         AppEvents.on('bulk:toggleDevice', (data) => this.toggleDeviceSelection(data));
         AppEvents.on('bulk:selectAll', () => this.selectAllDevices());
         AppEvents.on('bulk:clearAll', () => this.clearAllSelection());
+        
+        // Lịch sử
+        AppEvents.on('action:recordHistory', (data) => this.recordHistory(data));
+        
+        // Đã loại bỏ AppEvents.on('action:deviceSplit', ...) không đáng tin cậy. 
+        // Logic loadDevices sẽ được gọi bên trong confirmSplitDevice sau khi DB đã cập nhật.
+        
+        AppEvents.on('data:changed', () => {
+            this.loadDevices();
+        });
     }
-getStaff(data) {
-    medicalDB.getStaff(data.staffId).then(staff => {
-        if (data.callback) data.callback(staff);
-    }).catch(error => {
-        console.error('Error getting staff:', error);
-        if (data.callback) data.callback(null);
-    });
-}
+    
+    getStaff(data) {
+        medicalDB.getStaff(data.staffId).then(staff => {
+            if (data.callback) data.callback(staff);
+        }).catch(error => {
+            console.error('Error getting staff:', error);
+            if (data.callback) data.callback(null);
+        });
+    }
+
     async setup() {
         await this.loadReferenceData();
         await this.loadDevices();
@@ -67,63 +83,81 @@ getStaff(data) {
 
     async loadDevices() {
         try {
+            console.log('Loading devices...');
             this.allDevices = await medicalDB.getAllDevices();
-            this.applyCurrentFilters();
-            this.refreshView();
-            AppEvents.emit('stats:update', this.allDevices);
+            console.log('Total devices from DB:', this.allDevices.length);
+            this.applyFilters(); // Áp dụng filters hiện tại
         } catch(err){
-            console.error(err);
+            console.error('Error loading devices:', err);
             this.allDevices = [];
             this.filteredDevices = [];
             this.refreshView();
         }
     }
 
-    applyCurrentFilters() {
+    applyFilters() {
         if (window.locManager) {
+            // Sử dụng locManager để filter
             this.filteredDevices = window.locManager.applyFiltersToData(this.allDevices);
+            console.log('Filtered devices:', this.filteredDevices.length);
         } else {
-            this.filteredDevices = [...this.allDevices];
+            // Fallback: tự filter
+            this.filteredDevices = this.applyFiltersManually(this.allDevices);
         }
-    }
-
-    applyFilters(filters){
-        if (filters) this.currentFilters = filters;
-        this.currentPage=1;
-        this.applyFiltersDebounced();
-    }
-
-    applyFiltersImmediate(){
-        this.applyCurrentFilters();
+        
+        // Reset về trang 1 khi filter
+        this.currentPage = 1;
         this.refreshView();
+        AppEvents.emit('stats:update', this.allDevices);
     }
-
-    debounce(func, wait){
-        let timeout;
-        return (...args)=>{
-            clearTimeout(timeout);
-            timeout = setTimeout(()=>func(...args), wait);
+    
+    applyFiltersManually(devices) {
+        if (!this.currentFilters || Object.keys(this.currentFilters).length === 0) {
+            return [...devices];
         }
-    }
-
-    clearFilters(){
-        if(window.locManager) window.locManager.clearFilters();
-        this.currentPage=1;
-        this.applyCurrentFilters();
-        this.refreshView();
+        
+        let filtered = [...devices];
+        const f = this.currentFilters;
+        
+        // Search filter
+        if (f.search) {
+            const term = f.search.toLowerCase();
+            filtered = filtered.filter(item =>
+                (item.ten_thiet_bi && item.ten_thiet_bi.toLowerCase().includes(term)) ||
+                (item.model && item.model.toLowerCase().includes(term)) ||
+                (item.nha_san_xuat && item.nha_san_xuat.toLowerCase().includes(term))
+            );
+        }
+        
+        // Status filter
+        if (f.status) filtered = filtered.filter(item => item.tinh_trang === f.status);
+        
+        // Department filter
+        if (f.department) filtered = filtered.filter(item => item.phong_ban === f.department);
+        
+        // Category filter
+        if (f.category) filtered = filtered.filter(item => item.phan_loai === f.category);
+        
+        // Year range filter
+        if (f.yearRange && window.locManager) {
+            filtered = filtered.filter(item => window.locManager.filterByYearRange(item, f.yearRange));
+        }
+        
+        return filtered;
     }
 
     // --- Phân trang ---
     changePage(page){
-        if(page>=1 && page<=Math.ceil(this.filteredDevices.length/this.itemsPerPage)){
-            this.currentPage=page;
+        const totalPages = Math.ceil(this.filteredDevices.length/this.itemsPerPage);
+        if(page >= 1 && page <= totalPages){
+            this.currentPage = page;
             this.refreshView();
         }
     }
 
     changePageSize(size){
-        this.itemsPerPage = size>=1000 ? 1000:size;
-        this.currentPage=1;
+        this.itemsPerPage = size >= 1000 ? 1000 : parseInt(size);
+        this.currentPage = 1;
         this.refreshView();
     }
 
@@ -131,247 +165,389 @@ getStaff(data) {
         const devices = this.getCurrentPageDevices();
         AppEvents.emit('data:devicesUpdated', devices);
         this.updatePagination();
+        this.updateSelectionInfo();
     }
 
     getCurrentPageDevices(){
-        const start = (this.currentPage-1)*this.itemsPerPage;
-        const end = start+this.itemsPerPage;
-        return this.filteredDevices.slice(start,end);
+        const start = (this.currentPage - 1) * this.itemsPerPage;
+        const end = start + this.itemsPerPage;
+        return this.filteredDevices.slice(start, end);
     }
 
     updatePagination(){
         const totalPages = Math.ceil(this.filteredDevices.length/this.itemsPerPage);
         AppEvents.emit('ui:updatePagination',{
-            currentPage:this.currentPage,
+            currentPage: this.currentPage,
             totalPages,
-            totalDevices:this.filteredDevices.length,
-            itemsPerPage:this.itemsPerPage,
-            startIndex:(this.currentPage-1)*this.itemsPerPage+1,
-            endIndex: Math.min(this.currentPage*this.itemsPerPage, this.filteredDevices.length)
+            totalDevices: this.filteredDevices.length,
+            itemsPerPage: this.itemsPerPage,
+            startIndex: (this.currentPage - 1) * this.itemsPerPage + 1,
+            endIndex: Math.min(this.currentPage * this.itemsPerPage, this.filteredDevices.length)
         });
+    }
+
+    updateSelectionInfo() {
+        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
     }
 
     // --- Bulk selection ---
     selectAllDevices(){
-        this.getCurrentPageDevices().forEach(d=>this.selectedDevices.add(d.id));
-        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+        this.getCurrentPageDevices().forEach(d => this.selectedDevices.add(d.id));
+        this.updateSelectionInfo();
     }
 
     clearAllSelection(){
         this.selectedDevices.clear();
-        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+        this.updateSelectionInfo();
     }
-// Ghi lịch sử khi thêm thiết bị
-async addDevice(deviceData) {
-    try {
-        const deviceId = await medicalDB.addDevice(deviceData);
-        
-        // Ghi lịch sử
-        AppEvents.emit('action:recordHistory', {
-            type: 'create',
-            deviceId: deviceId,
-            deviceName: deviceData.ten_thiet_bi,
-            description: `Thêm mới thiết bị: ${deviceData.ten_thiet_bi}`,
-            changes: deviceData,
-            user: 'Quản trị viên'
-        });
-        
-        return deviceId;
-    } catch (error) {
-        throw error;
-    }
-}
 
-// Ghi lịch sử khi cập nhật
-async updateDevice(deviceId, updates) {
-    try {
-        await medicalDB.updateDevice(deviceId, updates);
-        
-        // Ghi lịch sử
-        AppEvents.emit('action:recordHistory', {
-            type: 'update',
-            deviceId: deviceId,
-            deviceName: updates.ten_thiet_bi,
-            description: `Cập nhật thiết bị`,
-            changes: updates,
-            user: 'Quản trị viên'
-        });
-        
-    } catch (error) {
-        throw error;
+    toggleSelectAll(checked){
+        if(checked){
+            this.selectAllDevices();
+        } else {
+            this.clearAllSelection();
+        }
     }
-}
-
-// Ghi lịch sử khi xóa
-async deleteDevice(deviceId) {
-    try {
-        const device = await medicalDB.getDevice(deviceId);
-        await medicalDB.deleteDevice(deviceId);
-        
-        // Ghi lịch sử
-        AppEvents.emit('action:recordHistory', {
-            type: 'delete',
-            deviceId: deviceId,
-            deviceName: device.ten_thiet_bi,
-            description: `Xóa thiết bị: ${device.ten_thiet_bi}`,
-            changes: {},
-            user: 'Quản trị viên'
-        });
-        
-    } catch (error) {
-        throw error;
-    }
-}
-   toggleSelectAll(checked){
-    this.getCurrentPageDevices().forEach(d=>{
-        if(checked) this.selectedDevices.add(d.id);
-        else this.selectedDevices.delete(d.id);
-    });
-    
-    // QUAN TRỌNG: Phát event để cập nhật bulk panel
-    AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
-    
-    // Refresh view để cập nhật trạng thái checkbox
-    this.refreshView();
-}
 
     toggleDeviceSelection(data){
-    if(data.checked) this.selectedDevices.add(data.deviceId);
-    else this.selectedDevices.delete(data.deviceId);
-    
-    // QUAN TRỌNG: Phát event để cập nhật bulk panel
-    AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
-}
+        if(data.checked){
+            this.selectedDevices.add(data.deviceId);
+        } else {
+            this.selectedDevices.delete(data.deviceId);
+        }
+        this.updateSelectionInfo();
+    }
 
     // --- CRUD ---
-    async addNewDevice(deviceData){
-        try{
-            const newId = await medicalDB.addDevice(deviceData);
-            await this.loadDevices();
-            return newId;
-        }catch(err){ throw err; }
-    }
-
-    async updateDevice(data){
-        try{
-            await medicalDB.updateDevice(data.deviceId, data.updates);
-            const idx = this.allDevices.findIndex(d=>d.id===data.deviceId);
-            if(idx!==-1) Object.assign(this.allDevices[idx], data.updates);
-            await medicalDB.addActivity({type:'update', description:`Cập nhật thiết bị: ${data.updates.ten_thiet_bi}`, user:'Quản trị viên'});
-            this.applyCurrentFilters();
-            this.refreshView();
-            AppEvents.emit('stats:update', this.allDevices);
-        }catch(err){ console.error(err); }
-    }
-
-    async deleteDevice(deviceId){
-        if(!confirm('Bạn có chắc chắn muốn xóa thiết bị này?')) return;
-        try{
-            const device = this.allDevices.find(d=>d.id===deviceId);
-            await medicalDB.deleteDevice(deviceId);
-            await medicalDB.addActivity({type:'delete', description:`Xóa thiết bị: ${device.ten_thiet_bi}`, user:'Quản trị viên'});
-            this.allDevices = this.allDevices.filter(d=>d.id!==deviceId);
-            this.selectedDevices.delete(deviceId);
-            this.applyCurrentFilters();
-            this.refreshView();
-            AppEvents.emit('stats:update', this.allDevices);
-        }catch(err){ console.error(err); }
-    }
-
-    async splitDevice(deviceId){
-        const device = this.allDevices.find(d=>d.id===deviceId);
-        if(!device || device.so_luong<=1){
-            AppEvents.emit('notification:show',{message:'Không thể chia thiết bị',type:'error'});
-            return;
+    async updateDevice(data) {
+        try {
+            await medicalDB.updateRecord('devices', data.deviceId, data.updates);
+            AppEvents.emit('notification:show', {
+                message: 'Cập nhật thiết bị thành công',
+                type: 'success'
+            });
+            AppEvents.emit('action:recordHistory', {
+                type: 'update',
+                description: `Cập nhật thiết bị #${data.deviceId}`,
+                deviceId: data.deviceId
+            });
+            this.loadDevices(); // Tải lại dữ liệu sau khi cập nhật
+        } catch (error) {
+            console.error('Error updating device:', error);
+            AppEvents.emit('notification:show', {
+                message: `Lỗi cập nhật thiết bị: ${error.message}`,
+                type: 'error'
+            });
         }
-        const qty = parseInt(prompt(`Nhập số lượng muốn tách từ "${device.ten_thiet_bi}" (hiện có: ${device.so_luong}):`));
-        if(!qty || isNaN(qty)||qty<=0||qty>=device.so_luong){
-            AppEvents.emit('notification:show',{message:'Số lượng không hợp lệ',type:'error'});
-            return;
-        }
-        await this.confirmSplitDevice(device, qty);
     }
 
-    async confirmSplitDevice(device, qty) {
-    if (!confirm(`Tách ${qty} từ ${device.so_luong} thiết bị "${device.ten_thiet_bi}"?`)) return;
+    async deleteDevice(id) {
+        if (!confirm('Bạn có chắc chắn muốn xóa thiết bị này?')) return;
+        try {
+            await medicalDB.deleteRecord('devices', id);
+            AppEvents.emit('notification:show', {
+                message: 'Xóa thiết bị thành công',
+                type: 'success'
+            });
+            AppEvents.emit('action:recordHistory', {
+                type: 'delete',
+                description: `Xóa thiết bị #${id}`,
+                deviceId: id
+            });
+            this.loadDevices(); // Tải lại dữ liệu sau khi xóa
+        } catch (error) {
+            console.error('Error deleting device:', error);
+            AppEvents.emit('notification:show', {
+                message: `Lỗi xóa thiết bị: ${error.message}`,
+                type: 'error'
+            });
+        }
+    }
     
-    try {
-        // 1. Cập nhật số lượng thiết bị gốc
-        await medicalDB.updateDevice(device.id, { so_luong: device.so_luong - qty });
+    // PHƯƠNG THỨC XỬ LÝ LOGIC TÁCH THIẾT BỊ (FIX LỖI ĐỒNG BỘ)
+    async confirmSplitDevice(device, qty, options = {}) {
+        const originalQty = device.so_luong;
         
-        // 2. Tạo serial_number DUY NHẤT
-        const timestamp = Date.now();
-        const randomStr = Math.random().toString(36).substr(2, 12);
-        const uniqueSerial = `SPLIT_${timestamp}_${device.id}_${randomStr}`;
+        // 1. Cập nhật thiết bị gốc
+        const updates = {
+            so_luong: originalQty - qty,
+            // Đảm bảo đồng bộ phân loại sản phẩm
+            phan_loai: medicalDB.determineCategory(device.ten_thiet_bi), 
+            thanh_tien: (device.nguyen_gia || 0) * (originalQty - qty)
+        };
         
-        // 3. Tạo thiết bị mới - LOẠI BỎ id và các trường tự động
+        if (!device.id) throw new Error('Device ID not found for splitting');
+
+        await medicalDB.updateRecord('devices', device.id, updates);
+
+        // 2. Tạo số serial duy nhất cho thiết bị mới
+        const uniqueSerial = `SPLIT_${device.serial_number}_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`;
+        
+        // 3. Tạo thiết bị mới
         const newDevice = {
-            // KHÔNG copy id, created_at, updated_at (sẽ được tự động tạo)
             serial_number: uniqueSerial,
             ten_thiet_bi: device.ten_thiet_bi,
             model: device.model || '',
             nha_san_xuat: device.nha_san_xuat || '',
-            nam_san_xuat: device.nam_san_xuat || null,
+            nam_san_xuat: options.newYear || device.nam_san_xuat || null,
             so_luong: qty,
             nguyen_gia: device.nguyen_gia || 0,
-            phan_loai: device.phan_loai || '',
+            // Đảm bảo đồng bộ phân loại sản phẩm
+            phan_loai: medicalDB.determineCategory(device.ten_thiet_bi), 
             don_vi_tinh: device.don_vi_tinh || 'cái',
-            phong_ban: device.phong_ban || '',
+            phong_ban: device.phong_ban || 'Chưa gán',
             tinh_trang: device.tinh_trang || 'Đang sử dụng',
-            ghi_chu: `Tách từ thiết bị ${device.id} (${device.serial_number}) - ${new Date().toLocaleDateString('vi-VN')}`,
+            ghi_chu: `Tách từ thiết bị #${device.id} (SL gốc: ${originalQty}). Số lượng tách: ${qty}. Năm SX mới: ${options.newYear || 'Không đổi'} - ${new Date().toLocaleDateString('vi-VN')}`,
             nhan_vien_ql: device.nhan_vien_ql || '',
-            ngay_nhap: device.ngay_nhap || new Date().toISOString().split('T')[0],
+            ngay_nhap: device.ngay_nhap,
             vi_tri: device.vi_tri || '',
             don_vi: device.don_vi || '',
-            is_active: device.is_active !== undefined ? device.is_active : true,
-            parent_id: device.id // Chỉ lưu parent_id thôi
-            // created_at và updated_at sẽ được tự động thêm trong addDevice
+            is_active: true,
+            parent_id: device.id,
         };
-        
-        console.log('Thiết bị mới:', newDevice);
-        
-        // 4. Thêm thiết bị mới
-        await medicalDB.addDevice(newDevice);
-        
-        // 5. Ghi log hoạt động
-        await medicalDB.addActivity({
+
+        const newDeviceId = await medicalDB.addRecord('devices', newDevice);
+
+        // 4. Ghi lịch sử và thông báo
+        AppEvents.emit('action:recordHistory', {
             type: 'split',
-            description: `Chia thiết bị ${device.ten_thiet_bi} (ID: ${device.id}) thành ${qty} thiết bị mới`,
-            user: 'Quản trị viên'
+            description: `Đã tách ${qty} ${newDevice.don_vi_tinh} từ thiết bị #${device.id} (còn lại ${updates.so_luong})`,
+            deviceId: device.id,
+            relatedDeviceId: newDeviceId
         });
-        
-        // 6. Tải lại dữ liệu
-        await this.loadDevices();
-        
         AppEvents.emit('notification:show', {
-            message: `Đã tách thành công ${qty} thiết bị từ "${device.ten_thiet_bi}"`,
+            message: `Đã tách thành công ${qty} thiết bị. Thiết bị mới #${newDeviceId} đã được tạo.`,
             type: 'success'
         });
         
-    } catch (error) {
-        console.error('Lỗi khi tách thiết bị:', error);
-        AppEvents.emit('notification:show', {
-            message: `Lỗi khi tách thiết bị: ${error.message}`,
-            type: 'error'
-        });
+        // 5. Tải lại dữ liệu (FIX LỖI ĐỒNG BỘ: đảm bảo dữ liệu mới đã được tải vào allDevices)
+        // Việc này đồng bộ sẽ khắc phục lỗi hiển thị số lượng sai trong chế độ gộp.
+        await this.loadDevices(); 
         
-        // Nếu có lỗi, khôi phục số lượng gốc
+        // Phát event để UI tự động mở nhóm vừa tách
+        AppEvents.emit('ui:autoExpandGroup', {
+            groupName: newDevice.ten_thiet_bi,
+            year: newDevice.nam_san_xuat,
+            newDeviceId: newDeviceId
+        });
+    }
+
+
+    // PHƯƠNG THỨC GỌI TÁCH THIẾT BỊ
+    async splitDevice(deviceId, options = {}) {
+        const device = this.allDevices.find(d => d.id === deviceId);
+        if(!device || device.so_luong <= 1){
+            AppEvents.emit('notification:show',{
+                message:'Không thể chia thiết bị', 
+                type:'error'
+            });
+            return;
+        }
+        
+        let qty = options.quantity;
+        let newYear = options.newYear; 
+
+        // Nếu không có quantity trong options, hỏi người dùng
+        if (!qty) {
+            qty = parseInt(prompt(`Nhập số lượng muốn tách từ \"${device.ten_thiet_bi}\" (hiện có: ${device.so_luong}):`));
+            if(!qty || isNaN(qty) || qty <= 0 || qty >= device.so_luong){
+                AppEvents.emit('notification:show',{
+                    message:'Số lượng không hợp lệ',
+                    type:'error'
+                });
+                return;
+            }
+        }
+        
+        // Gọi phương thức xử lý chia
         try {
-            await medicalDB.updateDevice(device.id, { so_luong: device.so_luong });
-        } catch (rollbackError) {
-            console.error('Lỗi khi khôi phục:', rollbackError);
+            await this.confirmSplitDevice(device, qty, { newYear: newYear });
+        } catch (error) {
+            console.error('Error during split operation:', error);
+            AppEvents.emit('notification:show', {
+                message: `Lỗi trong quá trình chia thiết bị: ${error.message}`,
+                type: 'error'
+            });
         }
     }
-}
+    
 
     getDevice(data){
-        const device = this.allDevices.find(d=>d.id===data.deviceId);
+        const device = this.allDevices.find(d => d.id === data.deviceId);
         if(data.callback) data.callback(device);
+    }
+    
+    recordHistory(data) {
+        // Được xử lý bởi history.js
+        if (window.historyManager) {
+            window.historyManager.recordHistory(data);
+        }
     }
 
     showAddDevice(){
         AppEvents.emit('ui:showAddDevice');
     }
+    
+    // Phương thức để các module khác truy cập
+    getAllDevices() {
+        return [...this.allDevices];
+    }
+    
+    getFilteredDevices() {
+        return [...this.filteredDevices];
+    }
+    // ========== PHÂN TRANG NHÓM ==========
+// Sửa phương thức getGroupedDevicesForPage trong quanly.js
+getGroupedDevicesForPage(page = 1, pageSize = 10) {
+    const allDevices = this.getFilteredDevices();
+    
+    // Kiểm tra nếu không có thiết bị
+    if (!allDevices || allDevices.length === 0) {
+        return {
+            groups: [],
+            currentPage: 1,
+            totalPages: 0,
+            totalGroups: 0,
+            pageSize: pageSize,
+            startIndex: 0,
+            endIndex: 0
+        };
+    }
+    
+    // Sử dụng phương thức groupDevicesHierarchically từ hienthiManager để có cấu trúc đầy đủ
+    if (window.hienThiManager) {
+        const grouped = window.hienThiManager.groupDevicesHierarchically(allDevices);
+        const groupArray = Object.values(grouped);
+        
+        // Phân trang
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedGroups = groupArray.slice(startIndex, endIndex);
+        
+        return {
+            groups: paginatedGroups,
+            currentPage: page,
+            totalPages: Math.ceil(groupArray.length / pageSize),
+            totalGroups: groupArray.length,
+            pageSize: pageSize,
+            startIndex: groupArray.length > 0 ? startIndex + 1 : 0,
+            endIndex: Math.min(endIndex, groupArray.length)
+        };
+    } else {
+        // Fallback: Tạo cấu trúc đơn giản nếu không có hienThiManager
+        const groups = {};
+        allDevices.forEach(device => {
+            const deviceName = device.ten_thiet_bi || 'Chưa đặt tên';
+            if (!groups[deviceName]) {
+                groups[deviceName] = {
+                    name: deviceName,
+                    years: {}, // Thêm thuộc tính years
+                    devices: [],
+                    totalQuantity: 0,
+                    totalValue: 0
+                };
+            }
+            
+            // Thêm device vào nhóm
+            const deviceYear = device.nam_san_xuat || 'Không xác định';
+            if (!groups[deviceName].years[deviceYear]) {
+                groups[deviceName].years[deviceYear] = {
+                    year: deviceYear,
+                    devices: [],
+                    quantity: 0,
+                    value: 0,
+                    models: new Set()
+                };
+            }
+            
+            // Cập nhật thông tin năm
+            const yearGroup = groups[deviceName].years[deviceYear];
+            yearGroup.devices.push(device);
+            yearGroup.quantity += (device.so_luong || 1);
+            yearGroup.value += (device.nguyen_gia || 0) * (device.so_luong || 1);
+            if (device.model) {
+                yearGroup.models.add(device.model);
+            }
+            
+            // Cập nhật tổng nhóm
+            groups[deviceName].devices.push(device);
+            groups[deviceName].totalQuantity += (device.so_luong || 1);
+            groups[deviceName].totalValue += (device.nguyen_gia || 0) * (device.so_luong || 1);
+        });
+        
+        // Chuyển đổi thành mảng và sắp xếp
+        const groupArray = Object.values(groups).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+        
+        // Phân trang
+        const startIndex = (page - 1) * pageSize;
+        const endIndex = startIndex + pageSize;
+        const paginatedGroups = groupArray.slice(startIndex, endIndex);
+        
+        return {
+            groups: paginatedGroups,
+            currentPage: page,
+            totalPages: Math.ceil(groupArray.length / pageSize),
+            totalGroups: groupArray.length,
+            pageSize: pageSize,
+            startIndex: groupArray.length > 0 ? startIndex + 1 : 0,
+            endIndex: Math.min(endIndex, groupArray.length)
+        };
+    }
 }
 
+// Phương thức để lấy thiết bị cho chế độ thẻ
+getCardDevicesForPage(page = 1, pageSize = 10) {
+    const allDevices = this.getFilteredDevices();
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    const paginatedDevices = allDevices.slice(startIndex, endIndex);
+    
+    return {
+        devices: paginatedDevices,
+        currentPage: page,
+        totalPages: Math.ceil(allDevices.length / pageSize),
+        totalDevices: allDevices.length,
+        pageSize: pageSize,
+        startIndex: startIndex + 1,
+        endIndex: Math.min(endIndex, allDevices.length)
+    };
+}
+// Phương thức lấy tất cả thiết bị đã lọc (không phân trang) - CHO HIỂN THỊ THẺ
+getAllFilteredDevices() {
+    return this.getFilteredDevices();
+}
+
+// Phương thức để lấy tổng số thiết bị
+getTotalDeviceCount() {
+    return this.filteredDevices.length;
+}
+
+// Phương thức để xử lý khi chọn tất cả thiết bị (cho footer)
+handleSelectAllFromFooter(isChecked) {
+    if (isChecked) {
+        // Chọn tất cả thiết bị đã lọc
+        this.filteredDevices.forEach(device => {
+            this.selectedDevices.add(device.id);
+        });
+    } else {
+        // Bỏ chọn tất cả
+        this.selectedDevices.clear();
+    }
+    
+    this.updateSelectionInfo();
+    
+    // Thông báo
+    AppEvents.emit('notification:show', {
+        message: isChecked ? 
+            `Đã chọn ${this.filteredDevices.length} thiết bị` : 
+            'Đã bỏ chọn tất cả thiết bị',
+        type: 'info'
+    });
+}
+    getCurrentPageDevicesCount() {
+        return this.getCurrentPageDevices().length;
+    }
+}
+
+// Khởi tạo global instance
 window.quanLyManager = new QuanLyManager();

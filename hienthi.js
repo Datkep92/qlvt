@@ -1,12 +1,17 @@
-// hienthi.js - Hiển thị giao diện chính (Hoàn chỉnh)
+// hienthi.js - Hiển thị giao diện chính với chế độ gộp tối ưu
 class HienThiManager {
-    constructor() {
-        this.moduleName = "HienThiManager";
-        this.currentView = 'table';
-        this.expandedGroups = new Set();
-        this.currentEditDevice = null;
-        this.init();
-    }
+   constructor() {
+    this.moduleName = "HienThiManager";
+    this.currentView = 'cards'; // Mặc định là chế độ thẻ
+    this.expandedGroups = new Set();
+    this.expandedYears = new Set();
+    this.selectedDevices = new Set();
+    this.currentEditDevice = null;
+    this.isManualClassificationMode = false; // Thêm biến theo dõi phân loại thủ công
+    this.paginationPageSize = 10; // Mặc định 10 thiết bị/nhóm mỗi trang
+    this.currentPage = 1;
+    this.init();
+}
 
     // ========== KHỞI TẠO ==========
     init() {
@@ -17,55 +22,77 @@ class HienThiManager {
         AppEvents.on('app:ready', () => this.setup());
         AppEvents.on('data:devicesUpdated', (data) => this.renderDevices(data));
         AppEvents.on('ui:switchView', (view) => this.switchView(view));
+        AppEvents.on('app:ready', () => this.setup());
+        AppEvents.on('data:devicesUpdated', (data) => this.renderDevices(data));
+        AppEvents.on('ui:switchView', (view) => this.switchView(view));
         AppEvents.on('ui:showDeviceDetails', (deviceId) => this.showDeviceDetails(deviceId));
         AppEvents.on('ui:showEditDevice', (deviceId) => this.showEditDevice(deviceId));
-        AppEvents.on('ui:updatePagination', (data) => this.renderPagination(data));
-        AppEvents.on('ui:changePage', (page) => this.changePage(page));
-        AppEvents.on('ui:changePageSize', (size) => this.changePageSize(size));
-            AppEvents.on('ui:showDeviceHistory', (deviceId) => this.showDeviceHistory(deviceId));
-
+        AppEvents.on('ui:showDeviceHistory', (deviceId) => this.showDeviceHistory(deviceId));
         AppEvents.on('bulk:selectionUpdated', (selected) => this.updateGroupSelections(selected));
         AppEvents.on('ui:toggleBulkPanel', () => this.toggleBulkPanel());
-        
         AppEvents.on('data:refreshView', () => {
             if (window.quanLyManager) {
+                // Sử dụng data:refreshView để kích hoạt lại renderDevices với dữ liệu hiện tại
                 const devices = window.quanLyManager.getCurrentPageDevices();
                 this.renderDevices(devices);
                 this.updateGlobalCheckbox();
             }
         });
+        AppEvents.on('ui:autoExpandGroup', (data) => {
+    if (data.groupName) {
+        // Mở nhóm chứa thiết bị
+        this.expandedGroups.add(data.groupName);
+        
+        // Mở năm nếu có
+        if (data.year) {
+            const yearKey = `${data.groupName}_${data.year}`;
+            this.expandedYears.add(yearKey);
+        }
+        
+        // Refresh view
+        this.refreshView();
+        
+        // Highlight thiết bị mới
+        setTimeout(() => {
+            this.highlightNewDevice();
+        }, 300);
+    }
+});
+        // Theo dõi selection từ quanLyManager
+        AppEvents.on('bulk:selectionUpdated', (selected) => {
+            this.selectedDevices = selected || new Set();
+            this.refreshView();
+        });
     }
 
-    async setup() {
-        this.renderMainLayout();
-        this.bindGlobalEvents();
-        console.log('✅ HienThiManager ready');
+// Phương thức highlight thiết bị mới
+highlightNewDevice() {
+    const lastSplitDevice = document.querySelector('.split-device:last-child');
+    if (lastSplitDevice) {
+        lastSplitDevice.classList.add('highlight-new');
+        setTimeout(() => {
+            lastSplitDevice.classList.remove('highlight-new');
+        }, 2000);
     }
+}
 
     // ========== MAIN LAYOUT ==========
     renderMainLayout() {
         const appContainer = document.getElementById('app') || document.body;
         appContainer.innerHTML = this.getMainTemplate();
-        
-        if (!document.getElementById('bulk-panel-section')) {
-            const bulkContainer = document.createElement('div');
-            bulkContainer.id = 'bulk-panel-section';
-            appContainer.appendChild(bulkContainer);
-        }
     }
-
-    getMainTemplate() {
-        return `
-            <div class="medical-app">
-                <!-- Header -->
-                <header class="app-header">
+// Trong hienthi.js, sửa phương thức getMainTemplate()
+getMainTemplate() {
+    return `
+        <div class="medical-app">
+            <header class="app-header">
                     <h1>🏥 QUẢN LÝ THIẾT BỊ Y TẾ</h1>
                     <div class="header-actions">
-                        <button class="btn-primary" onclick="AppEvents.emit('action:addDevice')">
-                            ➕ Thêm thiết bị
+                        <button class="btn-secondary" onclick="AppEvents.emit('action:addDevice')">
+                            ➕ Thêm
                         </button>
                         <button class="btn-secondary" onclick="AppEvents.emit('ui:showImport')">
-                            📥 Import Excel
+                            📥 Import
                         </button>
                         <button class="btn-secondary" onclick="AppEvents.emit('ui:showExport')">
                             📤 Export
@@ -73,204 +100,73 @@ class HienThiManager {
                         <button class="btn-secondary" onclick="AppEvents.emit('ui:showMaintenance')">
                             🛠️ Bảo trì
                         </button>
-                        
                     </div>
                 </header>
-                
-                <!-- Bộ lọc -->
-                <div class="filter-section" id="filter-section">
-                    <!-- Filter sẽ được render bởi loc.js -->
-                </div>
-                
-                
-                
-                <!-- Chế độ xem + Chọn tất cả -->
-                <div class="view-controls-section">
-                    <div class="view-mode-controls">
-                        <div class="view-toggle-group">
-                            <span class="view-label">Chế độ xem:</span>
-                            <button class="view-btn ${this.currentView === 'table' ? 'active' : ''}" 
-                                    onclick="window.hienThiManager.switchView('table')"
-                                    title="Chế độ bảng">
-                                📋 Bảng
-                            </button>
-                            <button class="view-btn ${this.currentView === 'cards' ? 'active' : ''}" 
-                                    onclick="window.hienThiManager.switchView('cards')"
-                                    title="Chế độ thẻ">
-                                🃏 Thẻ
-                            </button>
-                            <button class="view-btn ${this.currentView === 'tree' ? 'active' : ''}" 
-                                    onclick="window.hienThiManager.switchView('tree')"
-                                    title="Chế độ cây">
-                                🌲 Cây
-                            </button>
-                            <button class="view-btn ${this.currentView === 'group' ? 'active' : ''}" 
-                                    onclick="window.hienThiManager.switchView('group')"
-                                    title="Chế độ nhóm">
-                                📊 Nhóm
-                            </button>
-                        </div>
-                        <!-- Bulk Panel -->
-                <div class="bulk-panel-section" id="bulk-panel-section">
-                    <!-- Bulk panel sẽ được render bởi phanloai.js -->
-                </div>
-                <!-- Phân trang -->
-                <div class="pagination-section" id="pagination-section"></div>
-                        <div class="selection-controls">
-                            <div class="global-select-control">
-                                <input type="checkbox" id="global-select-all" 
-                                       onchange="window.hienThiManager.globalToggleAll(this.checked)"
-                                       title="Chọn tất cả thiết bị hiển thị">
-                                <label for="global-select-all">Chọn tất cả trang</label>
-                            </div>
-                            
-                            
-                            
-                            <div class="selection-info" id="selection-info">
-                                <span class="selected-count">0</span> thiết bị được chọn
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Nội dung chính -->
-                <main class="app-main">
-                    <div id="devices-container">
-                        <div class="loading">🔄 Đang tải thiết bị...</div>
-                    </div>
-                </main>
-                
-                
-            </div>
-        `;
-    }
-
-    // ========== RENDER VIEWS ==========
-    renderDevices(data) {
-        const container = document.getElementById('devices-container');
-        if (!container) return;
-        
-        if (!data || data.length === 0) {
-            container.innerHTML = this.getEmptyStateHTML();
-            return;
-        }
-        
-        try {
-            switch(this.currentView) {
-                case 'table':
-                    container.innerHTML = this.renderTableView(data);
-                    break;
-                case 'cards':
-                    container.innerHTML = this.renderCardsView(data);
-                    break;
-                case 'tree':
-                    container.innerHTML = this.renderTreeView(data);
-                    break;
-                case 'group':
-                    container.innerHTML = this.renderGroupView(data);
-                    break;
-                default:
-                    container.innerHTML = this.renderTableView(data);
-            }
             
-            this.bindViewEvents();
-        } catch (error) {
-            console.error('Error rendering devices:', error);
-            container.innerHTML = `<div class="error">Lỗi hiển thị: ${error.message}</div>`;
-        }
-    }
-
-    // ========== TABLE VIEW ==========
-    renderTableView(devices) {
-        const selectedDevices = window.quanLyManager?.selectedDevices || new Set();
-        
-        return `
-            <div class="table-container">
-                <table class="devices-table">
-                    <thead>
-                        <tr>
-                            <th><input type="checkbox" id="select-all" 
-                                     onchange="AppEvents.emit('bulk:toggleAll', this.checked)"></th>
-                            <th>#</th>
-                            <th>Tên thiết bị</th>
-                            <th>Model</th>
-                            <th>Năm SX</th>
-                            <th>SL</th>
-                            <th>Giá</th>
-                            <th>Trạng thái</th>
-                            <th>Phòng ban</th>
-                            <th>Hành động</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${devices.map((device, index) => this.getTableRowHTML(device, index, selectedDevices)).join('')}
-                    </tbody>
-                </table>
+            <div class="filter-section" id="filter-section">
+                <!-- Filter sẽ được render ở đây -->
             </div>
-        `;
-    }
-
-    getTableRowHTML(device, index, selectedDevices) {
-        const totalValue = (device.nguyen_gia || 0) * (device.so_luong || 1);
-        const isSelected = selectedDevices.has(device.id);
-        
-        return `
-            <tr class="device-row ${isSelected ? 'selected' : ''}">
-                <td>
-                    <input type="checkbox" 
-                          onchange="window.hienThiManager.toggleDeviceSelection(${device.id}, this.checked)"
-                          ${isSelected ? 'checked' : ''}>
-                </td>
-                <td>${index + 1}</td>
-                <td>
-                    <div class="device-name" onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})" style="cursor: pointer;">
-                        <strong>${this.escapeHtml(device.ten_thiet_bi)}</strong>
-                        ${device.model ? `<div class="device-model">${this.escapeHtml(device.model)}</div>` : ''}
+            
+            <div class="view-controls-section">
+                <div class="view-mode-controls">
+                    <div class="view-toggle-group">
+                        <button class="view-btn ${this.currentView === 'cards' ? 'active' : ''}" 
+                                onclick="window.hienThiManager.switchView('cards')"
+                                title="Chế độ thẻ">
+                            🃏 Thẻ
+                        </button>
+                        <button class="view-btn ${this.currentView === 'group' ? 'active' : ''}" 
+                                onclick="window.hienThiManager.switchView('group')"
+                                title="Chế độ nhóm gộp">
+                            📊 Nhóm gộp
+                        </button>
                     </div>
-                </td>
-                <td>${this.escapeHtml(device.model || '')}</td>
-                <td>${device.nam_san_xuat || '-'}</td>
-                <td>${device.so_luong}</td>
-                <td>${this.formatCurrency(totalValue)}</td>
-                <td>
-                    <span class="status-badge status-${this.getStatusClass(device.tinh_trang)}">
-                        ${this.getStatusIcon(device.tinh_trang)} ${device.tinh_trang}
-                    </span>
-                </td>
-                <td>${this.escapeHtml(device.phong_ban || '')}</td>
-                <td>
-                    <div class="action-buttons">
-                        <button class="btn-action" onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})" title="Xem chi tiết">👁️</button>
-                        <button class="btn-action" onclick="AppEvents.emit('ui:showEditDevice', ${device.id})" title="Sửa">✏️</button>
-                        <button class="btn-action" onclick="AppEvents.emit('action:splitDevice', ${device.id})" title="Chia thiết bị">🔄</button>
-                        <button class="btn-action btn-delete" onclick="AppEvents.emit('action:deleteDevice', ${device.id})" title="Xóa">🗑️</button>
-                    </div>
-                </td>
-            </tr>
-        `;
-    }
+                </div>
+            </div>
+            
+            <!-- Phân trang trên cùng -->
+            <div id="top-pagination-section" class="pagination-section top-pagination"></div>
+            
+            <main class="app-main">
+                <div id="devices-container">
+                    <div class="loading">🔄 Đang tải thiết bị...</div>
+                </div>
+            </main>
+            
+            <!-- Phân trang dưới cùng -->
+            <div id="bottom-pagination-section" class="pagination-section bottom-pagination"></div>
+            
+            <!-- Footer riêng cho thông tin -->
+            <footer class="app-footer">
+                <div class="footer-content">
+                    <span>Hệ thống Quản lý Thiết bị Y tế © 2024</span>
+                    <span class="footer-info">Tổng thiết bị: <span id="total-devices-count">0</span></span>
+                </div>
+            </footer>
+        </div>
+    `;
+}
 
     // ========== CARDS VIEW ==========
     renderCardsView(devices) {
-        const selectedDevices = window.quanLyManager?.selectedDevices || new Set();
-        
         return `
             <div class="cards-grid">
-                ${devices.map(device => this.getDeviceCardHTML(device, selectedDevices)).join('')}
+                ${devices.map(device => this.getDeviceCardHTML(device)).join('')}
             </div>
         `;
     }
 
-    getDeviceCardHTML(device, selectedDevices) {
+    getDeviceCardHTML(device) {
         const totalValue = (device.nguyen_gia || 0) * (device.so_luong || 1);
-        const isSelected = selectedDevices.has(device.id);
+        const isSelected = this.selectedDevices.has(device.id);
         
         return `
-            <div class="device-card ${isSelected ? 'selected' : ''}">
+            <div class="device-card ${isSelected ? 'selected' : ''}" data-device-id="${device.id}">
                 <div class="card-header">
                     <input type="checkbox" 
                            onchange="window.hienThiManager.toggleDeviceSelection(${device.id}, this.checked)"
-                           ${isSelected ? 'checked' : ''}>
+                           ${isSelected ? 'checked' : ''}
+                           class="device-checkbox">
                     <h3>${this.escapeHtml(device.ten_thiet_bi)}</h3>
                     <span class="status-badge status-${this.getStatusClass(device.tinh_trang)}">
                         ${this.getStatusIcon(device.tinh_trang)}
@@ -301,342 +197,715 @@ class HienThiManager {
                     </div>
                 </div>
                 <div class="card-actions">
-                    <button class="btn-card" onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})">👁️ Chi tiết</button>
-                    <button class="btn-card" onclick="AppEvents.emit('ui:showEditDevice', ${device.id})">✏️ Sửa</button>
+                    <button class="btn-card" onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})">👁️</button>
+                    <button class="btn-card" onclick="AppEvents.emit('ui:showEditDevice', ${device.id})">✏️</button>
+                    <button class="btn-card" onclick="AppEvents.emit('action:splitDevice', ${device.id})">🔄</button>
                 </div>
             </div>
         `;
     }
 
-    // ========== TREE VIEW ==========
-    renderTreeView(devices) {
-        const grouped = this.groupByDepartment(devices);
-        const selectedDevices = window.quanLyManager?.selectedDevices || new Set();
-        
-        return `
-            <div class="tree-view">
-                ${Object.entries(grouped).map(([dept, deptDevices]) => `
-                    <div class="tree-department">
-                        <div class="dept-header" onclick="this.classList.toggle('collapsed')">
-                            <span class="tree-icon">📂</span>
-                            <span class="dept-name">${this.escapeHtml(dept)}</span>
-                            <span class="dept-count">(${deptDevices.length})</span>
-                        </div>
-                        <div class="dept-devices">
-                            ${deptDevices.map(device => this.getTreeDeviceHTML(device, selectedDevices)).join('')}
+// Sửa phương thức renderGroupView trong hienthi.js
+renderGroupView(groups = null) {
+    if (!window.quanLyManager) return `<div class="error">Lỗi tải dữ liệu quản lý</div>`;
+    
+    let groupsToRender = groups;
+    if (!groupsToRender) {
+        // Lấy tất cả nhóm nếu không có tham số
+        const devices = window.quanLyManager.getFilteredDevices();
+        const grouped = this.groupDevicesHierarchically(devices);
+        groupsToRender = Object.values(grouped);
+    }
+    
+    // Kiểm tra groupsToRender có phải là mảng không
+    if (!Array.isArray(groupsToRender) || groupsToRender.length === 0) {
+        return `<div class="empty-state">
+            <div class="empty-icon">📭</div>
+            <h4>Không có thiết bị để nhóm</h4>
+            <p>Không tìm thấy thiết bị nào phù hợp với bộ lọc hiện tại</p>
+        </div>`;
+    }
+    
+    // Tính tổng số lượng và giá trị
+    const totalQuantity = groupsToRender.reduce((sum, group) => sum + (group.totalQuantity || 0), 0);
+    const totalValue = groupsToRender.reduce((sum, group) => sum + (group.totalValue || 0), 0);
+    
+    return `
+        <div class="group-view-container">
+            
+            
+            <div class="group-controls">
+                
+                <div class="group-buttons">
+                    <button class="btn-group" onclick="window.hienThiManager.expandAllGroups()">📖 Mở tất cả</button>
+                    <button class="btn-group" onclick="window.hienThiManager.collapseAllGroups()">📕 Đóng tất cả</button>
+                </div>
+            </div>
+            
+            <div class="group-list">
+                ${groupsToRender.map(group => this.renderGroupItemCompact(group.name || 'Chưa đặt tên', group)).join('')}
+            </div>
+        </div>
+    `;
+}
+// Thêm vào class HienThiManager
+formatCurrencyCompact(amount) {
+    if (amount === undefined || amount === null) return '0 ₫';
+    
+    if (amount >= 1000000000) {
+        return (amount / 1000000000).toFixed(1).replace(/\.0$/, '') + ' tỷ';
+    } else if (amount >= 1000000) {
+        return (amount / 1000000).toFixed(1).replace(/\.0$/, '') + ' tr';
+    } else if (amount >= 1000) {
+        return (amount / 1000).toFixed(0) + 'k';
+    }
+    
+    return new Intl.NumberFormat('vi-VN', {
+        style: 'currency',
+        currency: 'VND',
+        minimumFractionDigits: 0
+    }).format(amount);
+}
+    renderGroupItemCompact(groupName, groupData) {
+    // Kiểm tra dữ liệu đầu vào
+    if (!groupData || !groupData.years) {
+        console.error('Invalid groupData:', groupData);
+        return `<div class="compact-group-item error">Lỗi dữ liệu nhóm</div>`;
+    }
+    
+    const isGroupExpanded = this.expandedGroups.has(groupName);
+    const yearKeys = Object.keys(groupData.years || {});
+    
+    // Kiểm tra chọn tất cả
+    const allDevicesInGroup = groupData.devices ? groupData.devices.map(d => d.id) : [];
+    const allSelected = allDevicesInGroup.length > 0 && 
+                       allDevicesInGroup.every(id => this.selectedDevices.has(id));
+    const someSelected = allDevicesInGroup.some(id => this.selectedDevices.has(id));
+    
+    return `
+        <div class="compact-group-item ${isGroupExpanded ? 'expanded' : ''}">
+            <div class="group-header-compact" onclick="window.hienThiManager.toggleGroup('${this.escapeHtml(groupName)}')">
+                
+                <div class="group-info-compact">
+                    <div class="group-title-row">
+                        <div class="group-icon-title">
+                            <div class="group-checkbox" onclick="event.stopPropagation()">
+                                <input type="checkbox" 
+                                       ${allSelected ? 'checked' : ''}
+                                       ${someSelected && !allSelected ? 'data-indeterminate="true"' : ''}
+                                       onchange="window.hienThiManager.toggleGroupSelection('${this.escapeHtml(groupName)}', this.checked)">
+                            </div>
+                            <span class="group-icon">${isGroupExpanded ? '📂' : '📁'}</span>
+                            <h3 class="group-name">${this.escapeHtml(groupName)} ${isGroupExpanded ? '▼' : '▶'}</h3> 
                         </div>
                     </div>
-                `).join('')}
-            </div>
-        `;
-    }
-
-    getTreeDeviceHTML(device, selectedDevices) {
-        const isSelected = selectedDevices.has(device.id);
-        
-        return `
-            <div class="tree-device ${isSelected ? 'selected' : ''}">
-                <input type="checkbox" 
-                       onchange="window.hienThiManager.toggleDeviceSelection(${device.id}, this.checked)"
-                       ${isSelected ? 'checked' : ''}
-                       style="margin-right: 8px;">
-                <span class="tree-icon">📄</span>
-                <span class="device-name">${this.escapeHtml(device.ten_thiet_bi)}</span>
-                <span class="device-details">
-                    ${device.model ? `• ${device.model}` : ''}
-                    • ${device.so_luong} cái
-                    • ${this.getStatusIcon(device.tinh_trang)}
-                </span>
-                <div class="tree-actions">
-                    <button class="btn-action" onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})">👁️</button>
-                    <button class="btn-action" onclick="AppEvents.emit('ui:showEditDevice', ${device.id})">✏️</button>
-                </div>
-            </div>
-        `;
-    }
-
-    // ========== GROUP VIEW ==========
-    renderGroupView(devices) {
-        try {
-            const groupedDevices = this.groupDevicesByName(devices);
-            const groupKeys = Object.keys(groupedDevices);
-            const selectedDevices = window.quanLyManager?.selectedDevices || new Set();
-            
-            if (groupKeys.length === 0) {
-                return `<div class="empty-state">Không có thiết bị để nhóm</div>`;
-            }
-            
-            return `
-                <div class="group-view">
-                    ${groupKeys.map((groupName, groupIndex) => this.renderGroupItem(groupName, groupedDevices[groupName], groupIndex, selectedDevices)).join('')}
                     
-                    ${groupKeys.length > 0 ? `
-                        <div class="group-select-all">
-                            <input type="checkbox" id="select-all-groups" 
-                                   onchange="window.hienThiManager.toggleSelectAllGroups(this.checked, '${groupKeys.map(k => this.escapeHtml(k)).join('|')}')">
-                            <label for="select-all-groups">Chọn tất cả nhóm</label>
-                            <span class="selected-count">${selectedDevices.size} thiết bị đã chọn</span>
+                    <div class="group-stats-compact">
+                        <div class="stat-badge">
+                            <span class="stat-icon">📦</span>
+                            <span class="stat-value">${groupData.totalQuantity || 0}</span>
+                            <span class="stat-label">cái</span>
                         </div>
-                    ` : ''}
-                </div>
-            `;
-        } catch (error) {
-            console.error('Error rendering group view:', error);
-            return `<div class="error">Lỗi hiển thị chế độ nhóm: ${error.message}</div>`;
-        }
-    }
-
-    renderGroupItem(groupName, groupData, groupIndex, selectedDevices) {
-        const isExpanded = this.expandedGroups.has(groupName);
-        const isGroupSelected = this.isGroupSelected(groupName, selectedDevices);
-        const activeCount = groupData.items.reduce((sum, item) => 
-            sum + (item.tinh_trang === 'Đang sử dụng' ? item.so_luong : 0), 0);
-        const totalCount = groupData.items.reduce((sum, item) => sum + item.so_luong, 0);
-        
-        return `
-            <div class="device-group" data-group="${this.escapeHtml(groupName)}">
-                <div class="group-header ${isExpanded ? 'expanded' : ''}" 
-                     onclick="window.hienThiManager.toggleGroup('${this.escapeHtml(groupName)}')">
-                    <div class="group-info">
-                        <input type="checkbox" 
-                               class="group-checkbox"
-                               onclick="event.stopPropagation(); window.hienThiManager.toggleGroupSelection('${this.escapeHtml(groupName)}', this.checked)"
-                               ${isGroupSelected ? 'checked' : ''}
-                               title="Chọn toàn bộ nhóm">
-                        
-                        <span class="group-stt">${groupIndex + 1}</span>
-                        <span class="group-icon">📁</span>
-                        <span class="group-name">${this.escapeHtml(groupName)}</span>
-                        <span class="group-stats">
-                            — Tổng: ${activeCount}/${totalCount} active
-                        </span>
+                        <div class="stat-badge">
+                            <span class="stat-icon">💰</span>
+                            <span class="stat-value">${this.formatCurrencyCompact(groupData.totalValue || 0)}</span>
+                        </div>
+                        <div class="stat-badge">
+                            <span class="stat-icon">🏢</span>
+                            <span class="stat-value">${this.getUniqueDepartments(groupData.devices || [])}</span>
+                            <span class="stat-label">phòng</span>
+                        </div>
+                        <button class="action-btn" onclick="window.hienThiManager.renameGroup('${this.escapeHtml(groupName)}')" title="Đổi tên">
+                            <span class="btn-icon">✏️</span>
+                        </button>
+                        <button class="action-btn" onclick="window.hienThiManager.exportGroup('${this.escapeHtml(groupName)}')" title="Xuất nhóm">
+                            <span class="btn-icon">📤</span>
+                        </button>
                     </div>
-                    <div class="group-actions">
-                        <button class="btn-action" onclick="event.stopPropagation(); window.hienThiManager.splitGroup('${this.escapeHtml(groupName)}')" title="Chia nhanh">🔄</button>
-                        <button class="btn-action" onclick="event.stopPropagation(); window.hienThiManager.editGroupName('${this.escapeHtml(groupName)}')" title="Sửa tên nhóm">✏️</button>
-                        <button class="btn-action" onclick="event.stopPropagation(); window.hienThiManager.deleteGroup('${this.escapeHtml(groupName)}')" title="Xóa nhóm">🗑️</button>
-                        <span class="toggle-icon">${isExpanded ? '▼' : '▶'}</span>
+                </div>
+            </div>           
+            ${isGroupExpanded && yearKeys.length > 0 ? `
+                <div class="years-list">
+                    ${yearKeys.map(year => this.renderYearItemCompact(groupName, year, groupData.years[year])).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Helper function để tính số phòng ban độc lập (không đổi)
+getUniqueDepartments(devices) {
+    const depts = new Set();
+    devices.forEach(device => {
+        if (device.phong_ban) depts.add(device.phong_ban);
+    });
+    return depts.size;
+}
+
+renderYearItemCompact(groupName, year, yearData) {
+    const yearKey = `${groupName}_${year}`;
+    const isYearExpanded = this.expandedYears.has(yearKey);
+    
+    // Lấy danh sách model trong năm
+    const modelList = Array.from(yearData.models || []);
+    const modelText = modelList.length > 0 ? 
+        `<span class="model-badge">${modelList.slice(0, 2).join(', ')}${modelList.length > 2 ? '...' : ''}</span>` : 
+        '';
+    
+    // Kiểm tra chọn tất cả thiết bị trong năm
+    const allDevicesInYear = yearData.devices.map(d => d.id);
+    const allSelected = allDevicesInYear.length > 0 && 
+                       allDevicesInYear.every(id => this.selectedDevices.has(id));
+    const someSelected = allDevicesInYear.some(id => this.selectedDevices.has(id));
+    
+    return `
+        <div class="year-item-compact ${isYearExpanded ? 'expanded' : ''}">
+            <!-- H2: Header năm -->
+            <div class="year-header-compact" onclick="window.hienThiManager.toggleYear('${this.escapeHtml(groupName)}', '${year}')">
+                <div class="year-checkbox" onclick="event.stopPropagation()">
+                    <input type="checkbox" 
+                           ${allSelected ? 'checked' : ''}
+                           ${someSelected && !allSelected ? 'data-indeterminate="true"' : ''}
+                           onchange="window.hienThiManager.toggleYearSelection('${this.escapeHtml(groupName)}', '${year}', this.checked)">
+                </div>
+                
+                <div class="year-info-compact">
+                    <div class="year-title-row">
+                        <div class="year-icon-title">
+                            <span class="year-icon">📅</span>
+                            <h4 class="year-title">
+                                ${year === 'Không xác định' ? 'Năm không xác định' : `Năm ${year}`} ${isYearExpanded ? '▼' : '▶'}
+                                ${modelText}
+                            </h4>
+                        </div>
+                        <div class="year-toggle">${isYearExpanded ? '' : ''}</div>
+                    </div>
+                    
+                    <div class="year-stats-compact">
+                        <div class="stat-badge small">
+                            <span class="stat-icon">📦</span>
+                            <span class="stat-value">${yearData.quantity}</span>
+                            <span class="stat-label">cái</span>
+                        </div>
+                        <div class="stat-badge small price">
+                            <span class="stat-icon">💰</span>
+                            <span class="stat-value">${this.formatCurrencyCompact(yearData.value)}</span>
+                        </div>
+                        <div class="stat-badge small">
+                            <span class="stat-icon">🏢</span>
+                            <span class="stat-value">${this.getUniqueDepartments(yearData.devices)}</span>
+                            <span class="stat-label">phòng</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Danh sách thiết bị trong năm -->
+            ${isYearExpanded ? `
+                <div class="year-devices-list">
+                    ${yearData.devices.map(device => this.renderDeviceInYearCompact(device)).join('')}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+// Helper function
+getUniqueDepartments(devices) {
+    const depts = new Set();
+    devices.forEach(device => {
+        if (device.phong_ban) depts.add(device.phong_ban);
+    });
+    return depts.size;
+}
+
+// Sửa phần renderDeviceInYearCompact trong file hienthi.js
+renderDeviceInYearCompact(device) {
+    const isSelected = this.selectedDevices.has(device.id);
+    const deviceValue = (device.nguyen_gia || 0) * (device.so_luong || 1);
+    const isSplitDevice = device.parent_id || device.serial_number?.includes('SPLIT_');
+    
+    return `
+        <div class="device-item-year-compact ${isSelected ? 'selected' : ''} ${isSplitDevice ? 'split-device' : ''}" 
+             data-device-id="${device.id}">
+            
+            <!-- Checkbox -->
+            <div class="device-checkbox-year" onclick="event.stopPropagation()">
+                <input type="checkbox" 
+                       ${isSelected ? 'checked' : ''}
+                       onchange="window.hienThiManager.toggleDeviceSelection(${device.id}, this.checked)">
+            </div>
+            
+            <!-- Thông tin thiết bị -->
+            <div class="device-info-year" onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})">
+                <!-- Dòng 1: Model và status -->
+                <div class="device-model-row">
+                    ${device.model ? `<span class="device-model">${this.escapeHtml(device.model)}</span>` : ''}
+                    <span class="device-status ${this.getStatusClass(device.tinh_trang)}">
+                        ${this.getStatusIcon(device.tinh_trang)} ${device.tinh_trang}
+                    </span>
+                </div>
+                
+                <!-- Dòng 2: Thông tin cơ bản -->
+                <div class="device-basic-year">
+                    <div class="detail-item">
+                        <span class="detail-icon">📦</span>
+                        <span class="detail-text">${device.so_luong} ${device.don_vi_tinh || 'cái'}</span>
+                    </div>
+                    <div class="detail-item price">
+                        <span class="detail-icon">💰</span>
+                        <span class="detail-text">${this.formatCurrencyCompact(deviceValue)}</span>
                     </div>
                 </div>
                 
-                ${isExpanded ? `
-                    <div class="group-content">
-                        ${this.renderGroupItems(groupData.items, groupName, selectedDevices)}
+                <!-- Dòng 3: Thông tin bổ sung -->
+                <div class="device-extra-year">
+                    <div class="detail-item">
+                        <span class="detail-icon">🏢</span>
+                        <span class="detail-text">${device.phong_ban || 'Chưa gán'}</span>
+                    </div>
+                    ${device.nhan_vien_ql ? `
+                    <div class="detail-item">
+                        <span class="detail-icon">👤</span>
+                        <span class="detail-text">${this.escapeHtml(device.nhan_vien_ql)}</span>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+            
+            <!-- Action buttons - FIXED: Các nút liên quan đến thiết bị này -->
+            <div class="device-actions-year">
+                <button class="action-btn tiny" 
+                        onclick="AppEvents.emit('ui:showEditDevice', ${device.id}); event.stopPropagation()" 
+                        title="Sửa thiết bị">
+                    ✏️
+                </button>
+                <button class="action-btn tiny" 
+                        onclick="AppEvents.emit('action:splitDevice', ${device.id}); event.stopPropagation()" 
+                        title="Chia thiết bị này">
+                    🔄
+                </button>
+                <button class="action-btn tiny delete" 
+                        onclick="AppEvents.emit('action:deleteDevice', ${device.id}); event.stopPropagation()" 
+                        title="Xóa thiết bị">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    `;
+}
+// Sửa phương thức groupDevicesHierarchically
+groupDevicesHierarchically(devices) {
+    if (!devices || !Array.isArray(devices) || devices.length === 0) {
+        return {}; // Trả về object rỗng thay vì undefined
+    }
+    
+    const groups = {};
+    
+    devices.forEach(device => {
+        const deviceName = device.ten_thiet_bi || 'Chưa đặt tên';
+        const deviceYear = device.nam_san_xuat || 'Không xác định';
+        
+        // Level 1: Theo tên
+        if (!groups[deviceName]) {
+            groups[deviceName] = {
+                name: deviceName,
+                years: {},
+                totalQuantity: 0,
+                totalValue: 0,
+                devices: []
+            };
+        }
+        
+        // Level 2: Theo năm
+        if (!groups[deviceName].years[deviceYear]) {
+            groups[deviceName].years[deviceYear] = {
+                year: deviceYear,
+                devices: [],
+                quantity: 0,
+                value: 0,
+                models: new Set()
+            };
+        }
+        
+        const yearGroup = groups[deviceName].years[deviceYear];
+        yearGroup.devices.push(device);
+        yearGroup.quantity += (device.so_luong || 1);
+        yearGroup.value += (device.nguyen_gia || 0) * (device.so_luong || 1);
+        
+        // Thêm model vào set để hiển thị
+        if (device.model) {
+            yearGroup.models.add(device.model);
+        }
+        
+        // Cập nhật tổng nhóm
+        groups[deviceName].devices.push(device);
+        groups[deviceName].totalQuantity += (device.so_luong || 1);
+        groups[deviceName].totalValue += (device.nguyen_gia || 0) * (device.so_luong || 1);
+    });
+    
+    // Sắp xếp năm giảm dần
+    Object.values(groups).forEach(group => {
+        group.years = Object.fromEntries(
+            Object.entries(group.years).sort(([yearA], [yearB]) => {
+                if (yearA === 'Không xác định') return 1;
+                if (yearB === 'Không xác định') return -1;
+                return parseInt(yearB) - parseInt(yearA);
+            })
+        );
+    });
+    
+    return groups;
+}
+
+    renderGroupItem(groupName, groupData) {
+        const isGroupExpanded = this.expandedGroups.has(groupName);
+        const yearKeys = Object.keys(groupData.years);
+        
+        // Kiểm tra xem toàn bộ nhóm có được chọn không
+        const allDevicesInGroup = groupData.devices.map(d => d.id);
+        const allSelected = allDevicesInGroup.length > 0 && 
+                           allDevicesInGroup.every(id => this.selectedDevices.has(id));
+        const someSelected = allDevicesInGroup.some(id => this.selectedDevices.has(id));
+        
+        return `
+            <div class="device-group-item ${isGroupExpanded ? 'expanded' : ''} ${someSelected ? 'has-selected' : ''}">
+                <div class="group-header" onclick="window.hienThiManager.toggleGroup('${this.escapeHtml(groupName)}')">
+                    <div class="group-selector" onclick="event.stopPropagation()">
+                        <input type="checkbox" class="group-checkbox"
+                               ${allSelected ? 'checked' : ''}
+                               ${someSelected && !allSelected ? 'data-indeterminate="true"' : ''}
+                               onchange="window.hienThiManager.toggleGroupSelection('${this.escapeHtml(groupName)}', this.checked)">
+                    </div>
+                    
+                    <div class="group-icon">${isGroupExpanded ? '📂' : '📁'}</div>
+                    
+                    <div class="group-main-info">
+                        <h4 class="group-name">${this.escapeHtml(groupName)}</h4>
+                        <div class="group-stats">
+                            <span class="stat">
+                                <span class="stat-icon">📦</span>
+                                <span class="stat-text">${groupData.totalQuantity} cái</span>
+                            </span>
+                            <span class="stat">
+                                <span class="stat-icon">💰</span>
+                                <span class="stat-text">${this.formatCurrency(groupData.totalValue)}</span>
+                            </span>
+                            <span class="stat">
+                                <span class="stat-icon">📅</span> 
+                                <span class="stat-text">${yearKeys.length} năm</span>
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <div class="group-actions" onclick="event.stopPropagation()">
+                        <button class="btn-action" title="Chia toàn bộ nhóm"
+                                onclick="window.hienThiManager.splitEntireGroup('${this.escapeHtml(groupName)}')">
+                            🔄
+                        </button>
+                        <button class="btn-action" title="Sửa tên nhóm"
+                                onclick="window.hienThiManager.renameGroup('${this.escapeHtml(groupName)}')">
+                            ✏️
+                        </button>
+                        <button class="btn-action" title="Xuất nhóm"
+                                onclick="window.hienThiManager.exportGroup('${this.escapeHtml(groupName)}')">
+                            📤
+                        </button>
+                    </div>
+                    
+                    <div class="group-toggle">${isGroupExpanded ? '▼' : '▶'}</div>
+                </div>
+                
+                ${isGroupExpanded ? `
+                    <div class="group-years">
+                        ${yearKeys.map(year => this.renderYearItem(groupName, year, groupData.years[year])).join('')}
                     </div>
                 ` : ''}
             </div>
         `;
     }
 
-    renderGroupItems(items, groupName, selectedDevices) {
-        const allInGroupSelected = items.every(item => selectedDevices.has(item.id));
+    renderYearItem(groupName, year, yearData) {
+        const yearKey = `${groupName}_${year}`;
+        const isYearExpanded = this.expandedYears.has(yearKey);
+        
+        // Kiểm tra xem toàn bộ năm có được chọn không
+        const allDevicesInYear = yearData.devices.map(d => d.id);
+        const allSelected = allDevicesInYear.length > 0 && 
+                           allDevicesInYear.every(id => this.selectedDevices.has(id));
+        const someSelected = allDevicesInYear.some(id => this.selectedDevices.has(id));
         
         return `
-            <div class="group-items">
-                <div class="group-items-header">
-                    <div class="items-checkbox">
-                        <input type="checkbox" 
-                               class="select-all-items"
-                               onclick="window.hienThiManager.toggleSelectAllItemsInGroup('${this.escapeHtml(groupName)}', this.checked)"
-                               ${allInGroupSelected ? 'checked' : ''}
-                               title="Chọn tất cả trong nhóm này">
-                        <span class="items-count">${items.length} thiết bị trong nhóm</span>
+            <div class="year-item ${isYearExpanded ? 'expanded' : ''} ${someSelected ? 'has-selected' : ''}">
+                <div class="year-header" onclick="window.hienThiManager.toggleYear('${this.escapeHtml(groupName)}', '${year}')">
+                    <div class="year-selector" onclick="event.stopPropagation()">
+                        <input type="checkbox" class="year-checkbox"
+                               ${allSelected ? 'checked' : ''}
+                               ${someSelected && !allSelected ? 'data-indeterminate="true"' : ''}
+                               onchange="window.hienThiManager.toggleYearSelection('${this.escapeHtml(groupName)}', '${year}', this.checked)">
                     </div>
-                    <div class="items-actions">
-                        <button class="btn-small" onclick="window.hienThiManager.selectGroupForBulk('${this.escapeHtml(groupName)}', 'category')" title="Phân loại nhóm">🏷️</button>
-                        <button class="btn-small" onclick="window.hienThiManager.selectGroupForBulk('${this.escapeHtml(groupName)}', 'room')" title="Điều chuyển phòng">🏢</button>
-                        <button class="btn-small" onclick="window.hienThiManager.selectGroupForBulk('${this.escapeHtml(groupName)}', 'status')" title="Đổi trạng thái">🔄</button>
+                    
+                    <div class="year-icon">${isYearExpanded ? '📅' : '📆'}</div> 
+                    
+                    <div class="year-main-info">
+                        <h5 class="year-title">
+                            <span class="year-value">${year === 'Không xác định' ? 'Năm không xác định' : `Năm ${year}`}</span>
+                            <span class="year-badge">${yearData.quantity} cái</span>
+                            <span class="year-badge">${this.formatCurrency(yearData.value)}</span>
+                        </h5>
                     </div>
+                    
+                    <div class="year-actions" onclick="event.stopPropagation()">
+                        <button class="btn-action" title="Chia toàn bộ năm"
+                                onclick="window.hienThiManager.splitYear('${this.escapeHtml(groupName)}', '${year}')">
+                            🔄
+                        </button>
+                    </div>
+                    
+                    <div class="year-toggle">${isYearExpanded ? '▼' : '▶'}</div>
                 </div>
                 
-                ${items.map((item, index) => this.renderGroupItemRow(item, index, groupName, selectedDevices)).join('')}
+                ${isYearExpanded ? `
+                    <div class="year-devices">
+                        ${yearData.devices.map(device => this.renderDeviceInYear(device)).join('')}
+                    </div>
+                ` : ''}
             </div>
         `;
     }
-
-    renderGroupItemRow(item, index, groupName, selectedDevices) {
-        const activeQty = item.tinh_trang === 'Đang sử dụng' ? item.so_luong : 0;
-        const isItemSelected = selectedDevices.has(item.id);
-        
-        return `
-            <div class="group-item ${isItemSelected ? 'selected' : ''}" data-item-id="${item.id}">
-                <div class="item-main">
-                    <div class="item-info">
-                        <input type="checkbox" 
-                               class="item-checkbox"
-                               onclick="event.stopPropagation(); window.hienThiManager.toggleItemSelection(${item.id}, this.checked, '${this.escapeHtml(groupName)}')"
-                               ${isItemSelected ? 'checked' : ''}>
-                        
-                        <span class="item-stt">${index + 1}</span>
-                        <span class="item-icon">📄</span>
-                        <span class="item-name">${this.escapeHtml(item.ten_thiet_bi)}</span>
-                        <span class="item-details">
-                            ${item.nam_san_xuat ? `${item.nam_san_xuat} • ` : ''}
-                            SL: ${activeQty}/${item.so_luong} ${this.getStatusIcon(item.tinh_trang)}
-                        </span>
-                        <span class="item-location">
-                            ${item.phong_ban ? `• ${this.escapeHtml(item.phong_ban)}` : ''}
-                            ${item.nhan_vien_ql ? `• NV: ${this.escapeHtml(item.nhan_vien_ql)}` : ''}
-                        </span>
-                    </div>
-                    <div class="item-actions">
-                        <button class="btn-action" onclick="event.stopPropagation(); AppEvents.emit('ui:showDeviceDetails', ${item.id})" title="Chi tiết">👁️</button>
-                        <button class="btn-action" onclick="event.stopPropagation(); AppEvents.emit('ui:showEditDevice', ${item.id})" title="Sửa">✏️</button>
-                        <button class="btn-action" onclick="event.stopPropagation(); AppEvents.emit('action:splitDevice', ${item.id})" title="Chia/điều chuyển">🔄</button>
-                        <button class="btn-action btn-delete" onclick="event.stopPropagation(); AppEvents.emit('action:deleteDevice', ${item.id})" title="Xóa">🗑️</button>
-                    </div>
+getSplitInfoHTML(device) {
+    if (!device.parent_id && !device.serial_number?.includes('SPLIT_')) return '';
+    
+    let info = '';
+    if (device.parent_id) {
+        info += `<div class="device-split-info">Tách từ thiết bị #${device.parent_id}</div>`;
+    }
+    if (device.ghi_chu && device.ghi_chu.includes('Tách từ')) {
+        info += `<div class="device-split-info">${device.ghi_chu}</div>`;
+    }
+    return info;
+}
+renderDeviceInYear(device) {
+    const isSelected = this.selectedDevices.has(device.id);
+    const deviceValue = (device.nguyen_gia || 0) * (device.so_luong || 1);
+    
+    // Kiểm tra nếu device có parent_id (được tách ra)
+    const isSplitDevice = device.parent_id || device.serial_number?.includes('SPLIT_');
+    const splitInfo = isSplitDevice ? this.getSplitInfoHTML(device) : '';
+    
+    return `
+        <div class="device-in-year ${isSelected ? 'selected' : ''} ${isSplitDevice ? 'split-device' : ''}" data-device-id="${device.id}">
+            <div class="device-selector">
+                <input type="checkbox" 
+                       ${isSelected ? 'checked' : ''}
+                       onchange="window.hienThiManager.toggleDeviceSelection(${device.id}, this.checked)">
+            </div>
+            
+            <div class="device-info">
+                <div class="device-main">
+                    <span class="device-name">${this.escapeHtml(device.ten_thiet_bi)}</span>
+                    ${device.model ? `<span class="device-model">(${this.escapeHtml(device.model)})</span>` : ''}
+                    ${isSplitDevice ? '<span class="split-badge">🔄</span>' : ''}
                 </div>
+                <div class="device-details">
+                    <span class="detail">
+                        <span class="detail-icon">📦</span>
+                        <strong>${device.so_luong}</strong> ${device.don_vi_tinh || 'cái'}
+                    </span>
+                    <span class="detail">
+                        <span class="detail-icon">💰</span>
+                        ${this.formatCurrency(deviceValue)}
+                    </span>
+                    <span class="detail">
+                        <span class="detail-icon">🏢</span>
+                        ${device.phong_ban || 'Chưa gán'}
+                    </span>
+                    <span class="detail">
+                        <span class="detail-icon status-${this.getStatusClass(device.tinh_trang)}">${this.getStatusIcon(device.tinh_trang)}</span>
+                        ${device.tinh_trang}
+                    </span>
+                </div>
+                ${splitInfo}
             </div>
-        `;
-    }
+            
+            <div class="device-actions">
+                <button class="btn-action" title="Xem chi tiết"
+                        onclick="AppEvents.emit('ui:showDeviceDetails', ${device.id})">
+                    👁️
+                </button>
+                <button class="btn-action" title="Chỉnh sửa"
+                        onclick="AppEvents.emit('ui:showEditDevice', ${device.id})">
+                    ✏️
+                </button>
+                <button class="btn-action" title="Chia thiết bị"
+                        onclick="AppEvents.emit('action:splitDevice', ${device.id})">
+                    🔄
+                </button>
+                <button class="btn-action btn-delete" title="Xóa thiết bị"
+                        onclick="AppEvents.emit('action:deleteDevice', ${device.id})">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    `;
+}
 
-    // ========== GROUP VIEW FUNCTIONS ==========
-    groupDevicesByName(devices) {
-        const groups = {};
-        
-        devices.forEach(device => {
-            const key = device.ten_thiet_bi || 'Chưa đặt tên';
-            
-            if (!groups[key]) {
-                groups[key] = { name: key, items: [] };
-            }
-            
-            const existingItem = groups[key].items.find(item => 
-                item.nam_san_xuat === device.nam_san_xuat &&
-                item.nguyen_gia === device.nguyen_gia &&
-                item.phong_ban === device.phong_ban &&
-                item.nhan_vien_ql === device.nhan_vien_ql &&
-                item.tinh_trang === device.tinh_trang
-            );
-            
-            if (existingItem) {
-                existingItem.so_luong += device.so_luong;
-            } else {
-                groups[key].items.push({...device});
-            }
-        });
-        
-        return groups;
-    }
-
-    isGroupSelected(groupName, selectedDevices) {
-        if (!window.quanLyManager) return false;
-        
-        const devices = window.quanLyManager.getCurrentPageDevices();
+    // Trong phương thức toggleGroup
+toggleGroup(groupName) {
+    if (this.expandedGroups.has(groupName)) {
+        this.expandedGroups.delete(groupName);
+        // Đóng tất cả các năm trong nhóm này
+        const devices = window.quanLyManager?.getFilteredDevices() || [];
         const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        groupDevices.forEach(device => {
+            const yearKey = `${groupName}_${device.nam_san_xuat || 'Không xác định'}`;
+            this.expandedYears.delete(yearKey);
+        });
+    } else {
+        this.expandedGroups.add(groupName);
+        // TỰ ĐỘNG MỞ TẤT CẢ CÁC NĂM TRONG NHÓM KHI NHÓM MỞ
+        const devices = window.quanLyManager?.getFilteredDevices() || [];
+        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        const uniqueYears = [...new Set(groupDevices.map(d => d.nam_san_xuat || 'Không xác định'))];
         
-        return groupDevices.length > 0 && 
-               groupDevices.every(device => selectedDevices.has(device.id));
+        uniqueYears.forEach(year => {
+            const yearKey = `${groupName}_${year}`;
+            this.expandedYears.add(yearKey);
+        });
     }
+    this.refreshView();
+}
 
-    toggleGroup(groupName) {
-        if (this.expandedGroups.has(groupName)) {
-            this.expandedGroups.delete(groupName);
-        } else {
-            this.expandedGroups.add(groupName);
-        }
-        this.refreshView();
+    toggleYear(groupName, year) {
+    const yearKey = `${groupName}_${year}`;
+    
+    // FIX: Kiểm tra nếu năm chỉ có 1 thiết bị, tự động mở luôn thiết bị đó
+    if (!window.quanLyManager) return;
+    
+    const devices = window.quanLyManager.getFilteredDevices();
+    const yearDevices = devices.filter(d => 
+        d.ten_thiet_bi === groupName && 
+        (d.nam_san_xuat === year || (d.nam_san_xuat === null && year === 'Không xác định'))
+    );
+    
+    // Nếu năm chỉ có 1 thiết bị, hiển thị trực tiếp chi tiết
+    if (yearDevices.length === 1) {
+        AppEvents.emit('ui:showDeviceDetails', yearDevices[0].id);
+        return;
     }
+    
+    // Ngược lại, toggle như bình thường
+    if (this.expandedYears.has(yearKey)) {
+        this.expandedYears.delete(yearKey);
+    } else {
+        this.expandedYears.add(yearKey);
+    }
+    this.refreshView();
+}
+
+    expandAllGroups() {
+    if (!window.quanLyManager) return;
+    
+    const devices = window.quanLyManager.getFilteredDevices();
+    const grouped = this.groupDevicesHierarchically(devices);
+    
+    Object.keys(grouped).forEach(groupName => {
+        this.expandedGroups.add(groupName);
+        // Mở tất cả các năm trong mỗi nhóm
+        Object.keys(grouped[groupName].years).forEach(year => {
+            this.expandedYears.add(`${groupName}_${year}`);
+        });
+    });
+    
+    this.refreshView();
+    this.showNotification(`Đã mở ${Object.keys(grouped).length} nhóm và tất cả năm`, 'info');
+}
+
+    collapseAllGroups() {
+    this.expandedGroups.clear();
+    this.expandedYears.clear();
+    this.refreshView();
+    this.showNotification('Đã đóng tất cả nhóm và năm', 'info');
+}
 
     toggleGroupSelection(groupName, checked) {
         if (!window.quanLyManager) return;
         
-        const devices = window.quanLyManager.getCurrentPageDevices();
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
         const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
         
         if (checked) {
             groupDevices.forEach(device => {
-                window.quanLyManager.selectedDevices.add(device.id);
+                this.selectedDevices.add(device.id);
             });
         } else {
             groupDevices.forEach(device => {
-                window.quanLyManager.selectedDevices.delete(device.id);
+                this.selectedDevices.delete(device.id);
             });
         }
         
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
+        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+        this.refreshView();
     }
 
-    toggleItemSelection(itemId, checked, groupName) {
+    toggleYearSelection(groupName, year, checked) {
         if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const yearDevices = devices.filter(d => 
+            d.ten_thiet_bi === groupName && 
+            (d.nam_san_xuat === year || (d.nam_san_xuat === null && year === 'Không xác định'))
+        );
         
         if (checked) {
-            window.quanLyManager.selectedDevices.add(itemId);
-        } else {
-            window.quanLyManager.selectedDevices.delete(itemId);
-        }
-        
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
-    }
-
-    toggleSelectAllGroups(checked, groupNames) {
-        if (!window.quanLyManager) return;
-        
-        const groupArray = groupNames.split('|');
-        const devices = window.quanLyManager.getCurrentPageDevices();
-        
-        if (checked) {
-            devices.forEach(device => {
-                if (groupArray.includes(device.ten_thiet_bi)) {
-                    window.quanLyManager.selectedDevices.add(device.id);
-                }
+            yearDevices.forEach(device => {
+                this.selectedDevices.add(device.id);
             });
         } else {
-            devices.forEach(device => {
-                if (groupArray.includes(device.ten_thiet_bi)) {
-                    window.quanLyManager.selectedDevices.delete(device.id);
-                }
+            yearDevices.forEach(device => {
+                this.selectedDevices.delete(device.id);
             });
         }
         
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
+        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+        this.refreshView();
     }
 
-    toggleSelectAllItemsInGroup(groupName, checked) {
+    
+
+    // ========== GROUP ACTIONS ==========
+    splitEntireGroup(groupName) {
         if (!window.quanLyManager) return;
         
-        const devices = window.quanLyManager.getCurrentPageDevices();
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
         const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
         
-        if (checked) {
-            groupDevices.forEach(device => {
-                window.quanLyManager.selectedDevices.add(device.id);
-            });
-        } else {
-            groupDevices.forEach(device => {
-                window.quanLyManager.selectedDevices.delete(device.id);
-            });
+        if (groupDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong nhóm', 'warning');
+            return;
         }
         
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
+        this.showSplitGroupModal(groupName, groupDevices);
     }
 
-    selectGroupForBulk(groupName, actionType) {
+    splitYear(groupName, year) {
         if (!window.quanLyManager) return;
         
-        const devices = window.quanLyManager.getCurrentPageDevices();
-        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const yearDevices = devices.filter(d => 
+            d.ten_thiet_bi === groupName && 
+            (d.nam_san_xuat === year || (d.nam_san_xuat === null && year === 'Không xác định'))
+        );
         
-        groupDevices.forEach(device => {
-            window.quanLyManager.selectedDevices.add(device.id);
-        });
-        
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
-        
-        this.showNotification(`Nhóm "${groupName}" đã được chọn. Sử dụng panel THAO TÁC HÀNG LOẠT để ${this.getActionDescription(actionType)}`);
-        AppEvents.emit('ui:toggleBulkPanel');
-    }
-
-    getActionDescription(actionType) {
-        switch(actionType) {
-            case 'category': return 'phân loại';
-            case 'room': return 'điều chuyển phòng';
-            case 'status': return 'đổi trạng thái';
-            default: return 'thao tác';
+        if (yearDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong năm này', 'warning');
+            return;
         }
+        
+        const yearDisplay = year === 'Không xác định' ? 'năm không xác định' : `năm ${year}`;
+        this.showSplitYearModal(groupName, yearDisplay, yearDevices);
     }
 
-    editGroupName(groupName) {
+    renameGroup(groupName) {
         const newName = prompt('Nhập tên mới cho nhóm:', groupName);
         if (newName && newName.trim() !== '' && newName !== groupName) {
             if (!window.quanLyManager || !window.quanLyManager.allDevices) {
@@ -661,47 +930,84 @@ class HienThiManager {
         }
     }
 
-    deleteGroup(groupName) {
-        if (confirm(`Xóa toàn bộ nhóm "${groupName}"?`)) {
-            if (!window.quanLyManager || !window.quanLyManager.allDevices) {
-                this.showNotification('Không thể xóa nhóm', 'error');
-                return;
+    exportGroup(groupName) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        
+        if (groupDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong nhóm', 'warning');
+            return;
+        }
+        
+        const reportData = {
+            groupName: groupName,
+            devices: groupDevices,
+            totalDevices: groupDevices.length,
+            totalQuantity: groupDevices.reduce((sum, d) => sum + (d.so_luong || 1), 0),
+            totalValue: groupDevices.reduce((sum, d) => sum + (d.nguyen_gia || 0) * (d.so_luong || 1), 0),
+            generatedAt: new Date().toLocaleString('vi-VN')
+        };
+        
+        AppEvents.emit('export:custom', {
+            filename: `Bao-cao-nhom-${groupName.replace(/[^a-z0-9]/gi, '_')}-${new Date().toISOString().split('T')[0]}.xlsx`,
+            data: reportData
+        });
+        
+        this.showNotification(`Xuất báo cáo nhóm "${groupName}" thành công`, 'success');
+    }
+
+    exportGroupReport() {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const grouped = this.groupDevicesHierarchically(devices);
+        
+        AppEvents.emit('export:groupReport', {
+            groups: grouped,
+            totalDevices: devices.length,
+            generatedAt: new Date().toLocaleString('vi-VN')
+        });
+        
+        this.showNotification('Xuất báo cáo nhóm thành công', 'success');
+    }
+
+    filterGroups(searchTerm) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const grouped = this.groupDevicesHierarchically(devices);
+        
+        const filteredGroups = Object.entries(grouped)
+            .filter(([groupName]) => 
+                groupName.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        
+        // Tạm thời chỉ hiển thị nhóm được tìm thấy
+        const container = document.querySelector('.group-list');
+        if (container) {
+            if (filteredGroups.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <h4>Không tìm thấy nhóm</h4>
+                        <p>Không có nhóm nào phù hợp với "${searchTerm}"</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = filteredGroups.map(([groupName, groupData]) => 
+                    this.renderGroupItem(groupName, groupData)
+                ).join('');
             }
-            
-            const devices = window.quanLyManager.allDevices.filter(d => d.ten_thiet_bi === groupName);
-            
-            devices.forEach(device => {
-                AppEvents.emit('action:deleteDevice', device.id);
-            });
-            
-            setTimeout(() => {
-                if (window.quanLyManager) {
-                    window.quanLyManager.loadDevices();
-                }
-            }, 500);
         }
     }
 
-    splitGroup(groupName) {
-        if (!window.quanLyManager || !window.quanLyManager.allDevices) {
-            this.showNotification('Không thể chia nhóm', 'error');
-            return;
-        }
-        
-        const devices = window.quanLyManager.allDevices.filter(d => d.ten_thiet_bi === groupName);
-        
-        if (devices.length === 0) {
-            this.showNotification('Không tìm thấy thiết bị trong nhóm', 'error');
-            return;
-        }
-        
-        this.showSplitGroupModal(groupName, devices);
-    }
-
+    // ========== MODAL FUNCTIONS ==========
     showSplitGroupModal(groupName, devices) {
-        const modal = this.createModal('split-group-modal');
-        const totalQuantity = devices.reduce((sum, device) => sum + (device.so_luong || 0), 0);
+        const totalQuantity = devices.reduce((sum, device) => sum + (device.so_luong || 1), 0);
         
+        const modal = this.createModal('split-group-modal');
         modal.innerHTML = `
             <div class="modal-content">
                 <div class="modal-header">
@@ -709,109 +1015,141 @@ class HienThiManager {
                     <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
                 </div>
                 <div class="modal-body">
-                    <p>Tổng số lượng trong nhóm: <strong>${totalQuantity}</strong></p>
+                    <p>Tổng số lượng trong nhóm: <strong>${totalQuantity}</strong> cái</p>
+                    <p>Số thiết bị: <strong>${devices.length}</strong></p>
+                    
                     <div class="split-options">
-                        <label for="split-quantity">Số lượng muốn tách:</label>
-                        <input type="number" id="split-quantity" min="1" max="${totalQuantity - 1}" value="1">
+                        <div class="form-group">
+                            <label for="split-method">Phương pháp chia:</label>
+                            <select id="split-method" class="form-control">
+                                <option value="year">Chia theo năm sản xuất</option>
+                                <option value="quantity">Chia theo số lượng</option>
+                                <option value="room">Chia theo phòng ban</option>
+                            </select>
+                        </div>
+                        
+                        <div id="split-options-container">
+                            </div>
+                    </div>
+                    
+                    <div class="split-preview" id="split-preview">
+                        </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
+                    <button class="btn-primary" onclick="window.hienThiManager.confirmSplitGroup('${this.escapeHtml(groupName)}')">Chia nhóm</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Thêm sự kiện cho select method
+        const methodSelect = modal.querySelector('#split-method');
+        if (methodSelect) {
+            methodSelect.addEventListener('change', (e) => this.updateSplitOptions(e.target.value));
+        }
+    }
+
+    showSplitYearModal(groupName, yearDisplay, devices) {
+        const totalQuantity = devices.reduce((sum, device) => sum + (device.so_luong || 1), 0);
+        
+        const modal = this.createModal('split-year-modal');
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>🔄 CHIA NĂM: ${this.escapeHtml(groupName)} (${yearDisplay})</h3>
+                    <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p>Tổng số lượng trong năm: <strong>${totalQuantity}</strong> cái</p>
+                    
+                    <div class="split-options">
+                        <label for="split-quantity">Số lượng muốn tách (từ 1 đến ${totalQuantity - 1}):</label>
+                        <input type="number" id="split-quantity" min="1" max="${totalQuantity - 1}" value="1" class="form-control">
                         
                         <label for="split-device">Chọn thiết bị để tách:</label>
-                        <select id="split-device">
+                        <select id="split-device" class="form-control">
                             ${devices.map(device => `
                                 <option value="${device.id}">
                                     ${this.escapeHtml(device.ten_thiet_bi)} - SL: ${device.so_luong} - ${device.phong_ban || ''}
                                 </option>
                             `).join('')}
                         </select>
+                        
+                        <div class="form-check" style="margin-top: 10px;">
+                            <input type="checkbox" id="create-new-year" class="form-check-input">
+                            <label for="create-new-year" class="form-check-label">Tạo thiết bị với năm mới</label>
+                        </div>
+                        
+                        <div id="new-year-input" style="display: none; margin-top: 10px;">
+                            <label for="new-year-value">Năm sản xuất mới:</label>
+                            <input type="number" id="new-year-value" min="1900" max="2100" value="${new Date().getFullYear()}" class="form-control">
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
-                    <button class="btn-primary" onclick="window.hienThiManager.executeSplitGroup('${this.escapeHtml(groupName)}')">Chia</button>
+                    <button class="btn-primary" onclick="window.hienThiManager.confirmSplitYear('${this.escapeHtml(groupName)}', '${yearDisplay}')">Chia</button>
                 </div>
             </div>
         `;
         
         document.body.appendChild(modal);
+        
+        // Thêm sự kiện cho checkbox
+        const createNewYearCheckbox = modal.querySelector('#create-new-year');
+        const newYearInput = modal.querySelector('#new-year-input');
+        if (createNewYearCheckbox && newYearInput) {
+            createNewYearCheckbox.addEventListener('change', (e) => {
+                newYearInput.style.display = e.target.checked ? 'block' : 'none';
+            });
+        }
     }
 
-    executeSplitGroup(groupName) {
+    confirmSplitGroup(groupName) {
         const modal = document.querySelector('.split-group-modal');
         if (!modal) return;
         
-        const quantity = parseInt(modal.querySelector('#split-quantity').value);
-        const deviceId = parseInt(modal.querySelector('#split-device').value);
+        const method = modal.querySelector('#split-method').value;
         
-        if (!quantity || isNaN(quantity) || quantity <= 0) {
-            this.showNotification('Số lượng không hợp lệ', 'error');
-            return;
+        switch(method) {
+            case 'year':
+                this.splitGroupByYear(groupName);
+                break;
+            case 'quantity':
+                this.splitGroupByQuantity(groupName);
+                break;
+            case 'room':
+                this.splitGroupByRoom(groupName);
+                break;
         }
         
-        AppEvents.emit('action:splitDevice', deviceId);
         modal.remove();
     }
-
-    // ========== SELECTION MANAGEMENT ==========
-    globalToggleAll(checked) {
-        if (!window.quanLyManager) {
-            console.error('quanLyManager not initialized');
-            return;
-        }
-        
-        const currentPageDevices = window.quanLyManager.getCurrentPageDevices();
-        
-        if (checked) {
-            currentPageDevices.forEach(device => {
-                window.quanLyManager.selectedDevices.add(device.id);
-            });
-        } else {
-            currentPageDevices.forEach(device => {
-                window.quanLyManager.selectedDevices.delete(device.id);
-            });
-        }
-        
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
-        this.showNotification(
-            checked ? `Đã chọn ${currentPageDevices.length} thiết bị` : 
-                     `Đã bỏ chọn ${currentPageDevices.length} thiết bị`,
-            'info'
-        );
-        this.refreshView();
+confirmSplitYear(groupName, yearDisplay) {
+    const modal = document.querySelector('.split-year-modal');
+    if (!modal) return;
+    
+    const quantity = parseInt(modal.querySelector('#split-quantity').value);
+    const deviceId = parseInt(modal.querySelector('#split-device').value);
+    const createNewYear = modal.querySelector('#create-new-year').checked;
+    const newYear = createNewYear ? parseInt(modal.querySelector('#new-year-value').value) : null;
+    
+    if (!quantity || isNaN(quantity) || quantity <= 0) {
+        this.showNotification('Số lượng không hợp lệ', 'error');
+        return;
     }
+    
+    // Gọi action split device với options
+    AppEvents.emit('action:splitDevice', deviceId, { quantity, newYear });
+    
+    // Loại bỏ AppEvents.emit('action:deviceSplit'); vì logic đã được fix đồng bộ trong quanly.js
+    
+    modal.remove();
+}
 
-    globalClearAll() {
-        if (!window.quanLyManager) {
-            console.error('quanLyManager not initialized');
-            return;
-        }
-        
-        window.quanLyManager.selectedDevices.clear();
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
-        
-        const globalCheckbox = document.getElementById('global-select-all');
-        if (globalCheckbox) {
-            globalCheckbox.checked = false;
-            globalCheckbox.indeterminate = false;
-        }
-        
-        this.showNotification('Đã bỏ chọn tất cả thiết bị', 'success');
-        this.refreshView();
-    }
-
-    toggleDeviceSelection(deviceId, checked) {
-        if (!window.quanLyManager) {
-            console.error('quanLyManager not initialized');
-            return;
-        }
-        
-        if (checked) {
-            window.quanLyManager.selectedDevices.add(deviceId);
-        } else {
-            window.quanLyManager.selectedDevices.delete(deviceId);
-        }
-        
-        AppEvents.emit('bulk:selectionUpdated', window.quanLyManager.selectedDevices);
-        this.updateGlobalCheckbox();
-    }
+ 
 
     updateGlobalCheckbox() {
         const globalCheckbox = document.getElementById('global-select-all');
@@ -826,7 +1164,7 @@ class HienThiManager {
         }
         
         const selectedOnPage = currentPageDevices.filter(device => 
-            window.quanLyManager.selectedDevices.has(device.id)
+            this.selectedDevices.has(device.id)
         ).length;
         
         if (selectedOnPage === 0) {
@@ -841,57 +1179,605 @@ class HienThiManager {
         }
     }
 
-    updateGroupSelections(selectedDevices) {
+    globalToggleAll(checked) {
+        if (!window.quanLyManager) {
+            console.error('quanLyManager not initialized');
+            return;
+        }
+        
+        const currentPageDevices = window.quanLyManager.getCurrentPageDevices();
+        
+        if (checked) {
+            currentPageDevices.forEach(device => {
+                this.selectedDevices.add(device.id);
+            });
+        } else {
+            currentPageDevices.forEach(device => {
+                this.selectedDevices.delete(device.id);
+            });
+        }
+        
+        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+        this.showNotification(
+            checked ? `Đã chọn ${currentPageDevices.length} thiết bị` : 
+                     `Đã bỏ chọn ${currentPageDevices.length} thiết bị`,
+            'info'
+        );
         this.refreshView();
     }
 
-    updateSelectionInfo() {
-        const selectionInfo = document.getElementById('selection-info');
-        if (!selectionInfo || !window.quanLyManager) return;
-        
-        const selectedCount = window.quanLyManager.selectedDevices.size;
-        const selectedCountSpan = selectionInfo.querySelector('.selected-count');
-        
-        if (selectedCountSpan) {
-            selectedCountSpan.textContent = selectedCount;
+
+
+// 3. Thêm phương thức lấy tất cả thiết bị đã lọc
+getAllFilteredDevices() {
+    if (!window.quanLyManager) return [];
+    return window.quanLyManager.getFilteredDevices(); // Lấy tất cả thiết bị đã lọc
+}
+
+// 4. Thêm phương thức cập nhật footer
+updateFooterStats(totalDevices) {
+    // Cập nhật footer thủ công
+    const footerBar = document.querySelector('.app-footer-bar');
+    if (!footerBar) {
+        this.renderFooter();
+        return;
+    }
+    
+    const selectedCountSpan = footerBar.querySelector('#selected-count');
+    const totalCountSpan = footerBar.querySelector('#total-count');
+    const selectAllCheckbox = footerBar.querySelector('#select-all-devices');
+    const manualBtn = footerBar.querySelector('.manual-classification-btn');
+    
+    if (selectedCountSpan) {
+        selectedCountSpan.textContent = this.selectedDevices.size;
+    }
+    
+    if (totalCountSpan) {
+        totalCountSpan.textContent = totalDevices || 0;
+    }
+    
+    // Cập nhật trạng thái checkbox chọn tất cả
+    if (selectAllCheckbox && totalDevices > 0) {
+        if (this.selectedDevices.size === totalDevices) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.removeAttribute('data-indeterminate');
+        } else if (this.selectedDevices.size > 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.setAttribute('data-indeterminate', 'true');
         } else {
-            selectionInfo.innerHTML = `<span class="selected-count">${selectedCount}</span> thiết bị được chọn`;
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.removeAttribute('data-indeterminate');
         }
+    }
+    
+    // Cập nhật trạng thái nút phân loại thủ công
+    if (manualBtn) {
+        manualBtn.classList.toggle('active', this.isManualClassificationMode);
+        manualBtn.querySelector('.btn-text').textContent = 
+            this.isManualClassificationMode ? 'Tắt Phân loại thủ công' : 'Bật Phân loại thủ công';
+    }
+}
+
+// 5. Thêm phương thức render footer
+renderFooter() {
+    // Tạo hoặc cập nhật footer
+    let footerBar = document.querySelector('.app-footer-bar');
+    if (!footerBar) {
+        footerBar = document.createElement('div');
+        footerBar.className = 'app-footer-bar';
+        document.body.appendChild(footerBar);
+    }
+    
+    // Lấy tổng số thiết bị
+    const totalDevices = this.getAllFilteredDevices().length;
+    
+    footerBar.innerHTML = `
+        <div class="footer-stats">
+            <span>Tổng số: <span id="total-count">${totalDevices}</span> thiết bị</span>
+            <span class="separator">|</span>
+            <span>Đã chọn: <span id="selected-count">${this.selectedDevices.size}</span> thiết bị</span>
+        </div>
+        <div class="footer-controls">
+            <div class="control-group-select-all">
+                <input type="checkbox" id="select-all-devices" 
+                       ${this.selectedDevices.size === totalDevices && totalDevices > 0 ? 'checked' : ''}
+                       ${this.selectedDevices.size > 0 && this.selectedDevices.size < totalDevices ? 'data-indeterminate="true"' : ''}
+                       onchange="window.hienThiManager.toggleSelectAllDevices(this.checked)">
+                <label for="select-all-devices">Chọn tất cả</label>
+            </div>
+            <button class="btn-primary btn-sm" 
+                            onclick="AppEvents.emit('ui:showBulkPopup', window.hienThiManager.selectedDevices)">
+                        🛠️ Thao tác hàng loạt
+                    </button>
+        </div>
+    `;
+}
+
+// 6. Thêm phương thức toggle chọn tất cả thiết bị
+toggleSelectAllDevices(checked) {
+    const allDevices = this.getAllFilteredDevices();
+    
+    if (checked) {
+        // Chọn tất cả
+        allDevices.forEach(device => {
+            this.selectedDevices.add(device.id);
+        });
+    } else {
+        // Bỏ chọn tất cả
+        this.selectedDevices.clear();
+    }
+    
+    // Phát sự kiện cập nhật
+    AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+    
+    // Hiển thị thông báo
+    this.showNotification(
+        checked ? `Đã chọn ${allDevices.length} thiết bị` : 
+                 'Đã bỏ chọn tất cả thiết bị',
+        'info'
+    );
+    
+    // Cập nhật footer
+    this.updateFooterStats(allDevices.length);
+    
+    // Nếu đang ở chế độ phân loại thủ công, hiển thị panel
+    if (checked && this.isManualClassificationMode) {
+        this.toggleManualClassificationPanel(true);
+    }
+}
+
+// 7. Thêm phương thức bật/tắt phân loại thủ công
+toggleManualClassification() {
+    this.isManualClassificationMode = !this.isManualClassificationMode;
+    
+    // Cập nhật UI
+    this.updateFooterStats(this.getAllFilteredDevices().length);
+    
+    // Hiển thị thông báo
+    this.showNotification(
+        `Chế độ phân loại thủ công đã ${this.isManualClassificationMode ? 'BẬT' : 'TẮT'}`,
+        this.isManualClassificationMode ? 'success' : 'info'
+    );
+    
+    // Nếu bật và có thiết bị được chọn, hiển thị panel
+    if (this.isManualClassificationMode && this.selectedDevices.size > 0) {
+        this.toggleManualClassificationPanel(true);
+    } else if (!this.isManualClassificationMode) {
+        this.toggleManualClassificationPanel(false);
+    }
+}
+
+// 8. Thêm phương thức hiển thị/ẩn panel phân loại thủ công
+toggleManualClassificationPanel(show) {
+    // Kiểm tra nếu module phân loại đã được khởi tạo
+    if (window.phanLoaiManager) {
+        if (show) {
+            window.phanLoaiManager.showManualClassificationPanel(this.selectedDevices);
+        } else {
+            window.phanLoaiManager.hideManualClassificationPanel();
+        }
+    } else {
+        this.showNotification('Hệ thống phân loại chưa sẵn sàng', 'warning');
+    }
+}
+
+// 2. Sửa phương thức toggleDeviceSelection để hiển thị popup phân loại nhanh
+toggleDeviceSelection(deviceId, checked) {
+    if (checked) {
+        this.selectedDevices.add(deviceId);
+    } else {
+        this.selectedDevices.delete(deviceId);
+    }
+    
+    AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+    
+    // HIỆN POPUP PHÂN LOẠI NHANH KHI CÓ THIẾT BỊ ĐƯỢC CHỌN
+    if (this.selectedDevices.size > 0) {
+        // Gọi bulk panel nhưng hiển thị dưới dạng popup
+        AppEvents.emit('ui:showBulkPopup', this.selectedDevices);
+    }
+    
+    this.refreshView();
+}
+
+// Thêm phương thức hiển thị popup
+showBulkPopup(selectedDevices) {
+    // Gọi module phân loại để hiển thị popup
+    if (window.phanLoaiXuLyManager) {
+        window.phanLoaiXuLyManager.showBulkPopup(selectedDevices);
+    }
+}
+
+// 10. Sửa phương thức clearAllSelections để ẩn panel
+clearAllSelections() {
+    this.selectedDevices.clear();
+    AppEvents.emit('bulk:selectionUpdated', new Set());
+    
+    // Ẩn panel phân loại thủ công nếu đang hiển thị
+    if (this.isManualClassificationMode) {
+        this.toggleManualClassificationPanel(false);
+    }
+    
+    this.showNotification('Đã xóa tất cả lựa chọn', 'success');
+    this.refreshView();
+}
+
+// 11. Trong phương thức setup, thêm gọi renderFooter
+async setup() {
+    this.renderMainLayout();
+    this.bindGlobalEvents();
+    this.renderFooter(); // Thêm dòng này
+    console.log('✅ HienThiManager ready');
+}
+
+
+
+// 13. Thêm phương thức updateSelectionInfo (sửa lại)
+updateSelectionInfo() {
+        // Cập nhật cả trên header và footer
+        const selectionInfo = document.getElementById('selection-info');
+        const selectedCount = this.selectedDevices.size;
         
-        selectionInfo.style.display = selectedCount > 0 ? 'block' : 'none';
+       
+        
+        // Cập nhật footer
+        this.updateFooterStats(this.getAllFilteredDevices().length);
     }
 
-    // ========== VIEW CONTROLS ==========
-    switchView(view) {
-        this.currentView = view;
+    updateGroupSelections(selectedDevices) {
+        this.selectedDevices = selectedDevices || new Set();
+        this.refreshView();
+    }
+
+    calculateTotalValue(devices) {
+        return devices.reduce((sum, device) => 
+            sum + (device.nguyen_gia || 0) * (device.so_luong || 1), 0
+        );
+    }
+
+    // ========== FORMATTING FUNCTIONS ==========
+    escapeHtml(unsafe) {
+        if (typeof unsafe !== 'string') return unsafe || '';
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    formatCurrency(amount) {
+        if (amount === undefined || amount === null) return '0 ₫';
+        return new Intl.NumberFormat('vi-VN', {
+            style: 'currency',
+            currency: 'VND'
+        }).format(amount);
+    }
+
+    getStatusClass(status) {
+        const statusMap = {
+            'Đang sử dụng': 'success',
+            'Bảo trì': 'warning', 
+            'Hỏng': 'danger',
+            'Ngừng sử dụng': 'secondary'
+        };
+        return statusMap[status] || 'secondary';
+    }
+
+    getStatusIcon(status) {
+        const iconMap = {
+            'Đang sử dụng': '🟢',
+            'Bảo trì': '🟡',
+            'Hỏng': '🔴',
+            'Ngừng sử dụng': '⚫'
+        };
+        return iconMap[status] || '⚪';
+    }
+
+    getEmptyStateHTML() {
+        return `
+            <div class="empty-state">
+                <div class="empty-icon">📭</div>
+                <h3>Không có thiết bị nào</h3>
+                <p>Hãy thêm thiết bị đầu tiên để bắt đầu quản lý</p>
+                <button class="btn-primary" onclick="AppEvents.emit('action:addDevice')">
+                    ➕ Thêm thiết bị đầu tiên
+                </button>
+            </div>
+        `;
+    }
+
+    createModal(className) {
+        const modal = document.createElement('div');
+        modal.className = `modal ${className}`;
+        modal.style.cssText = `
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0,0,0,0.5); 
+            z-index: 10000; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+        `;
         
-        // Update active state
-        document.querySelectorAll('.view-btn').forEach(btn => {
-            btn.classList.remove('active');
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
         });
         
-        if (event && event.target) {
-            event.target.classList.add('active');
-        }
-        
-        // Refresh view
-        this.refreshView();
+        return modal;
     }
 
-    refreshView() {
-        if (window.quanLyManager) {
-            const devices = window.quanLyManager.getCurrentPageDevices();
-            this.renderDevices(devices);
-            this.updateGlobalCheckbox();
-            this.updateSelectionInfo();
+    showNotification(message, type = 'info') {
+        AppEvents.emit('notification:show', {
+            message: message,
+            type: type
+        });
+    }
+
+
+// ========== PHÂN TRANG ==========
+changePage(page) {
+    this.currentPage = page;
+    this.refreshView();
+}
+
+changePageSize(size) {
+    if (size === 'all') {
+        this.paginationPageSize = 1000; // Số lớn để hiển thị tất cả
+    } else {
+        this.paginationPageSize = parseInt(size);
+    }
+    this.currentPage = 1; // Reset về trang đầu tiên
+    this.refreshView();
+}
+// Thêm vào class HienThiManager
+handleError(error) {
+    console.error('HienThiManager Error:', error);
+    
+    const container = document.getElementById('devices-container');
+    if (container) {
+        container.innerHTML = `
+            <div class="error-state">
+                <div class="error-icon">⚠️</div>
+                <h3>Đã xảy ra lỗi</h3>
+                <p>${error.message || 'Không thể tải dữ liệu'}</p>
+                <button class="btn-primary" onclick="location.reload()">
+                    🔄 Tải lại trang
+                </button>
+            </div>
+        `;
+    }
+    
+    // Ẩn phân trang khi có lỗi
+    this.togglePagination(false);
+}
+
+// Gọi handleError trong các phương thức render khi có lỗi
+renderDevices(data) {
+    try {
+        const container = document.getElementById('devices-container');
+        if (!container) return;
+        
+        // Ở chế độ cards: hiển thị theo phân trang
+        if (this.currentView === 'cards') {
+            if (!window.quanLyManager) {
+                throw new Error('Không thể kết nối với hệ thống quản lý');
+            }
+            
+            const paginationData = window.quanLyManager.getCardDevicesForPage(this.currentPage, this.paginationPageSize);
+            const devices = paginationData.devices || [];
+            
+            if (devices.length === 0) {
+                container.innerHTML = this.getEmptyStateHTML();
+                this.togglePagination(false);
+                return;
+            }
+            
+            container.innerHTML = this.renderCardsView(devices);
+            this.togglePagination(true);
+            this.renderPagination(paginationData);
+        } 
+        // Ở chế độ group: hiển thị theo phân trang nhóm
+        else if (this.currentView === 'group') {
+            if (!window.quanLyManager) {
+                throw new Error('Không thể kết nối với hệ thống quản lý');
+            }
+            
+            const paginationData = window.quanLyManager.getGroupedDevicesForPage(this.currentPage, this.paginationPageSize);
+            const groups = paginationData.groups || [];
+            
+            if (groups.length === 0) {
+                container.innerHTML = this.getEmptyStateHTML();
+                this.togglePagination(false);
+                return;
+            }
+            
+            container.innerHTML = this.renderGroupView(groups);
+            this.togglePagination(true);
+            this.renderPagination(paginationData);
         }
+        
+        this.bindViewEvents();
+        this.updateSelectionInfo();
+    } catch (error) {
+        this.handleError(error);
+    }
+}
+// Thêm phương thức mới để cập nhật cả hai phân trang
+renderPagination(paginationData) {
+    const topPagination = document.getElementById('top-pagination-section');
+    const bottomPagination = document.getElementById('bottom-pagination-section');
+    
+    if (!paginationData || paginationData.totalPages === 0) {
+        if (topPagination) topPagination.innerHTML = '';
+        if (bottomPagination) bottomPagination.innerHTML = '';
+        return;
+    }
+    
+    const paginationHTML = this.getPaginationHTML(paginationData);
+    
+    if (topPagination) {
+        topPagination.innerHTML = paginationHTML;
+    }
+    
+    if (bottomPagination) {
+        bottomPagination.innerHTML = paginationHTML;
+    }
+    
+    // Cập nhật số thiết bị trong footer
+    this.updateFooterStats(paginationData);
+}
+
+// Tách phương thức tạo HTML phân trang riêng
+getPaginationHTML(paginationData) {
+    const { currentPage, totalPages, totalGroups, totalDevices, startIndex, endIndex, pageSize } = paginationData;
+    const totalItems = this.currentView === 'cards' ? totalDevices : totalGroups;
+    
+    return `
+        <div class="pagination-container">
+            <div class="pagination-info">
+                <span class="device-count">
+                    Hiển thị ${startIndex}-${endIndex} của ${totalItems} ${this.currentView === 'cards' ? 'thiết bị' : 'nhóm'}
+                </span>
+                <div class="page-size-selector">
+                    <select id="page-size-select" onchange="window.hienThiManager.changePageSizeHandler(event)">
+                        <option value="10" ${pageSize === 10 ? 'selected' : ''}>10/trang</option>
+                        <option value="20" ${pageSize === 20 ? 'selected' : ''}>20/trang</option>
+                        <option value="50" ${pageSize === 50 ? 'selected' : ''}>50/trang</option>
+                        <option value="100" ${pageSize === 100 ? 'selected' : ''}>100/trang</option>
+                        <option value="500" ${pageSize === 500 ? 'selected' : ''}>500/trang</option>
+                        <option value="all" ${pageSize >= 1000 ? 'selected' : ''}>Tất cả</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div class="pagination-controls">
+                ${this.renderPageButtons(currentPage, totalPages)}
+            </div>
+        </div>
+    `;
+}
+// Thêm phương thức updateFooterStats
+updateFooterStats(paginationData) {
+    const totalDevicesCount = document.getElementById('total-devices-count');
+    if (totalDevicesCount && window.quanLyManager) {
+        const allDevices = window.quanLyManager.getFilteredDevices();
+        totalDevicesCount.textContent = allDevices.length;
+    }
+}
+renderPageButtons(currentPage, totalPages) {
+    if (totalPages <= 1) return '';
+    
+    let buttons = '';
+    const maxVisiblePages = 6;
+    
+    // Previous button
+    if (currentPage > 1) {
+        buttons += `<button class="page-nav" onclick="window.hienThiManager.changePage(${currentPage - 1})">◀️</button>`;
+    } else {
+        buttons += `<button class="page-nav disabled" disabled>◀️</button>`;
+    }
+    
+    // Page numbers
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    if (endPage - startPage + 1 < maxVisiblePages) {
+        startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    for (let i = startPage; i <= endPage; i++) {
+        buttons += `
+            <button class="page-number ${i === currentPage ? 'active' : ''}" 
+                    onclick="window.hienThiManager.changePage(${i})">
+                ${i}
+            </button>
+        `;
+    }
+    
+    // Next button
+    if (currentPage < totalPages) {
+        buttons += `<button class="page-nav" onclick="window.hienThiManager.changePage(${currentPage + 1})">▶️</button>`;
+    } else {
+        buttons += `<button class="page-nav disabled" disabled>▶️</button>`;
+    }
+    
+    return buttons;
+}
+
+changePageSizeHandler(event) {
+    const size = event.target.value;
+    this.changePageSize(size);
+}
+
+// Sửa phương thức togglePagination để xử lý cả hai section
+togglePagination(show) {
+    const topPagination = document.getElementById('top-pagination-section');
+    const bottomPagination = document.getElementById('bottom-pagination-section');
+    
+    if (topPagination) {
+        topPagination.style.display = show ? 'block' : 'none';
+    }
+    
+    if (bottomPagination) {
+        bottomPagination.style.display = show ? 'block' : 'none';
+    }
+}
+
+// Sửa phương thức switchView để reset trang
+switchView(view) {
+    this.currentView = view;
+    this.currentPage = 1; // Reset về trang đầu tiên khi chuyển chế độ
+    
+    // Update active state
+    document.querySelectorAll('.view-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    const btn = document.querySelector(`.view-btn[onclick*="'${view}'"]`);
+    if (btn) btn.classList.add('active');
+    
+    // Refresh view
+    this.refreshView();
+}
+
+// Sửa phương thức refreshView
+refreshView() {
+    if (window.quanLyManager) {
+        const devices = window.quanLyManager.getCurrentPageDevices();
+        this.renderDevices(devices);
+        this.updateGlobalCheckbox();
+        this.updateSelectionInfo();
+    }
+}
+
+    toggleBulkPanel() {
+        AppEvents.emit('ui:toggleBulkPanel');
     }
 
     bindViewEvents() {
         // Add any additional view-specific event bindings here
     }
 
-    // ========== MODAL FUNCTIONS ==========
+    bindGlobalEvents() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-close-modal')) {
+                this.closeAllModals();
+            }
+        });
+    }
+
+    closeAllModals() {
+        document.querySelectorAll('.modal').forEach(modal => modal.remove());
+    }
+
+    // ========== DEVICE DETAILS & EDIT ==========
     showDeviceDetails(deviceId) {
         if (!window.quanLyManager) {
             this.showNotification('Không thể hiển thị chi tiết', 'error');
@@ -908,10 +1794,44 @@ class HienThiManager {
         });
     }
 
+    showEditDevice(deviceId) {
+        if (!window.quanLyManager) {
+            this.showNotification('Không thể chỉnh sửa', 'error');
+            return;
+        }
+        
+        AppEvents.emit('data:getDevice', {
+            deviceId: deviceId, 
+            callback: (device) => {
+                if (device) {
+                    this.currentEditDevice = device;
+                    this.renderEditModal(device);
+                }
+            }
+        });
+    }
+
+    async showDeviceHistory(deviceId) {
+        if (window.historyManager) {
+            window.historyManager.showDeviceHistory(deviceId);
+        } else {
+            this.showNotification('Hệ thống lịch sử chưa sẵn sàng', 'warning');
+        }
+    }
+
+    // ========== DEVICE MODAL TEMPLATES ==========
     renderDeviceModal(device) {
         const modal = this.createModal('device-details');
         modal.innerHTML = this.getDeviceDetailsHTML(device);
         document.body.appendChild(modal);
+    }
+
+    renderEditModal(device) {
+        const modal = this.createModal('edit-device');
+        modal.innerHTML = this.getEditDeviceHTML(device);
+        document.body.appendChild(modal);
+        
+        this.loadEditModalData(modal, device);
     }
 
     getDeviceDetailsHTML(device) {
@@ -978,10 +1898,9 @@ class HienThiManager {
                     </div>
                 </div>
                 <div class="modal-footer">
-                 <!-- THÊM NÚT NÀY -->
-                <button class="btn-secondary" onclick="AppEvents.emit('ui:showDeviceHistory', ${device.id})">
-                    🕒 Lịch sử
-                </button>
+                    <button class="btn-secondary" onclick="AppEvents.emit('ui:showDeviceHistory', ${device.id})">
+                        🕒 Lịch sử
+                    </button>
                     <button class="btn-secondary" onclick="this.closest('.modal').remove()">Đóng</button>
                     <button class="btn-primary" onclick="AppEvents.emit('ui:showEditDevice', ${device.id}); this.closest('.modal').remove()">
                         ✏️ Chỉnh sửa
@@ -989,38 +1908,6 @@ class HienThiManager {
                 </div>
             </div>
         `;
-    }
-// Thêm hàm mới
-async showDeviceHistory(deviceId) {
-    if (window.historyManager) {
-        window.historyManager.showDeviceHistory(deviceId);
-    } else {
-        this.showNotification('Hệ thống lịch sử chưa sẵn sàng', 'warning');
-    }
-}
-    showEditDevice(deviceId) {
-        if (!window.quanLyManager) {
-            this.showNotification('Không thể chỉnh sửa', 'error');
-            return;
-        }
-        
-        AppEvents.emit('data:getDevice', {
-            deviceId: deviceId, 
-            callback: (device) => {
-                if (device) {
-                    this.currentEditDevice = device;
-                    this.renderEditModal(device);
-                }
-            }
-        });
-    }
-
-    renderEditModal(device) {
-        const modal = this.createModal('edit-device');
-        modal.innerHTML = this.getEditDeviceHTML(device);
-        document.body.appendChild(modal);
-        
-        this.loadEditModalData(modal, device);
     }
 
     getEditDeviceHTML(device) {
@@ -1177,221 +2064,6 @@ async showDeviceHistory(deviceId) {
         if (modal) {
             modal.remove();
         }
-    }
-
- 
-
-    // ========== UTILITY FUNCTIONS ==========
-    getEmptyStateHTML() {
-        return `
-            <div class="empty-state">
-                <div class="empty-icon">📭</div>
-                <h3>Không có thiết bị nào</h3>
-                <p>Hãy thêm thiết bị đầu tiên để bắt đầu quản lý</p>
-                <button class="btn-primary" onclick="AppEvents.emit('action:addDevice')">
-                    ➕ Thêm thiết bị đầu tiên
-                </button>
-            </div>
-        `;
-    }
-
-    escapeHtml(unsafe) {
-        if (typeof unsafe !== 'string') return unsafe || '';
-        return unsafe
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/"/g, "&quot;")
-            .replace(/'/g, "&#039;");
-    }
-
-    formatCurrency(amount) {
-        if (!amount) return '0 ₫';
-        return new Intl.NumberFormat('vi-VN', {
-            style: 'currency',
-            currency: 'VND'
-        }).format(amount);
-    }
-
-    getStatusClass(status) {
-        const statusMap = {
-            'Đang sử dụng': 'success',
-            'Bảo trì': 'warning', 
-            'Hỏng': 'danger',
-            'Ngừng sử dụng': 'secondary'
-        };
-        return statusMap[status] || 'secondary';
-    }
-
-    getStatusIcon(status) {
-        const iconMap = {
-            'Đang sử dụng': '🟢',
-            'Bảo trì': '🟡',
-            'Hỏng': '🔴',
-            'Ngừng sử dụng': '⚫'
-        };
-        return iconMap[status] || '⚪';
-    }
-
-    groupByDepartment(devices) {
-        const groups = {};
-        devices.forEach(device => {
-            const dept = device.phong_ban || 'Chưa phân loại';
-            if (!groups[dept]) groups[dept] = [];
-            groups[dept].push(device);
-        });
-        return groups;
-    }
-
-    createModal(className) {
-        const modal = document.createElement('div');
-        modal.className = `modal ${className}`;
-        modal.style.cssText = `
-            position: fixed; 
-            top: 0; 
-            left: 0; 
-            width: 100%; 
-            height: 100%; 
-            background: rgba(0,0,0,0.5); 
-            z-index: 10000; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-        `;
-        
-        // Close on background click
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                modal.remove();
-            }
-        });
-        
-        return modal;
-    }
-
-    showNotification(message, type = 'info') {
-        AppEvents.emit('notification:show', {
-            message: message,
-            type: type
-        });
-    }
-
-    // ========== PAGINATION ==========
-    renderPagination(paginationInfo) {
-        const paginationSection = document.getElementById('pagination-section');
-        if (!paginationSection) return;
-        
-        const { currentPage, totalPages, totalDevices, startIndex, endIndex, itemsPerPage } = paginationInfo;
-        
-        paginationSection.innerHTML = `
-            <div class="pagination-info">
-                <span class="device-count">Hiển thị ${startIndex}-${endIndex} của ${totalDevices} thiết bị</span>
-                <span class="page-size-selector">
-                    <select id="page-size-select" onchange="window.hienThiManager.changePageSizeHandler(event)">
-                        <option value="10" ${itemsPerPage === 10 ? 'selected' : ''}>10/trang</option>
-                        <option value="25" ${itemsPerPage === 25 ? 'selected' : ''}>25/trang</option>
-                        <option value="50" ${itemsPerPage === 50 ? 'selected' : ''}>50/trang</option>
-                        <option value="100" ${itemsPerPage === 100 ? 'selected' : ''}>100/trang</option>
-                        <option value="1000" ${itemsPerPage === 1000 ? 'selected' : ''}>Tất cả</option>
-                    </select>
-                </span>
-            </div>
-            <div class="pagination-controls">
-                ${this.renderPageButtons(currentPage, totalPages)}
-            </div>
-        `;
-        
-        this.bindPaginationEvents();
-    }
-
-    bindPaginationEvents() {
-        const pageSizeSelect = document.getElementById('page-size-select');
-        if (pageSizeSelect) {
-            pageSizeSelect.onchange = (event) => {
-                const size = event.target.value === '1000' ? 1000 : parseInt(event.target.value);
-                AppEvents.emit('data:changePageSize', size);
-            };
-        }
-    }
-
-    renderPageButtons(currentPage, totalPages) {
-        if (totalPages <= 1) return '';
-        
-        let buttons = '';
-        const maxVisiblePages = 5;
-        
-        // Previous button
-        if (currentPage > 1) {
-            buttons += `<button class="page-nav" onclick="AppEvents.emit('data:changePage', ${currentPage - 1})">◀️ Trước</button>`;
-        } else {
-            buttons += `<button class="page-nav disabled" disabled>◀️ Trước</button>`;
-        }
-        
-        // Page numbers
-        let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
-        let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
-        
-        if (endPage - startPage + 1 < maxVisiblePages) {
-            startPage = Math.max(1, endPage - maxVisiblePages + 1);
-        }
-        
-        if (startPage > 1) {
-            buttons += `<button class="page-number" onclick="AppEvents.emit('data:changePage', 1)">1</button>`;
-            if (startPage > 2) buttons += `<span class="page-dots">...</span>`;
-        }
-        
-        for (let i = startPage; i <= endPage; i++) {
-            buttons += `
-                <button class="page-number ${i === currentPage ? 'active' : ''}" 
-                        onclick="AppEvents.emit('data:changePage', ${i})">
-                    ${i}
-                </button>
-            `;
-        }
-        
-        if (endPage < totalPages) {
-            if (endPage < totalPages - 1) buttons += `<span class="page-dots">...</span>`;
-            buttons += `<button class="page-number" onclick="AppEvents.emit('data:changePage', ${totalPages})">${totalPages}</button>`;
-        }
-        
-        // Next button
-        if (currentPage < totalPages) {
-            buttons += `<button class="page-nav" onclick="AppEvents.emit('data:changePage', ${currentPage + 1})">Sau ▶️</button>`;
-        } else {
-            buttons += `<button class="page-nav disabled" disabled>Sau ▶️</button>`;
-        }
-        
-        return buttons;
-    }
-
-    changePage(page) {
-        AppEvents.emit('data:changePage', page);
-    }
-
-    changePageSize(size) {
-        AppEvents.emit('data:changePageSize', size === 'all' ? 1000 : parseInt(size));
-    }
-
-    changePageSizeHandler(event) {
-        const size = event.target.value === '1000' ? 1000 : parseInt(event.target.value);
-        AppEvents.emit('data:changePageSize', size);
-    }
-
-    toggleBulkPanel() {
-        AppEvents.emit('ui:toggleBulkPanel');
-    }
-
-    // ========== GLOBAL EVENTS ==========
-    bindGlobalEvents() {
-        document.addEventListener('click', (e) => {
-            if (e.target.classList.contains('btn-close-modal')) {
-                this.closeAllModals();
-            }
-        });
-    }
-
-    closeAllModals() {
-        document.querySelectorAll('.modal').forEach(modal => modal.remove());
     }
 }
 

@@ -1,0 +1,141 @@
+.bulk-popup-modal .modal-content {
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.bulk-popup-modal .bulk-operations-panel {
+    display: block !important;
+    border: none;
+    box-shadow: none;
+}
+
+
+/* Bulk Popup Modal */
+.bulk-popup-modal {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.bulk-popup-modal .modal-content {
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    width: 90%;
+    max-width: 800px;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 0;
+}
+
+/* Bulk Panel trong popup */
+.bulk-operations-panel {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    border-radius: 10px;
+}
+
+/* Sửa header cho đẹp */
+.bulk-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    border-radius: 10px 10px 0 0;
+    margin-bottom: 0;
+}
+
+.bulk-header h3 {
+    margin: 0 0 10px 0;
+    color: white;
+}
+
+.selection-stats {
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#selected-count {
+    background: white;
+    color: #667eea;
+    font-weight: bold;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 1.2em;
+}
+
+/* Nội dung panel */
+.bulk-content {
+    padding: 20px;
+}
+
+/* Danh sách thiết bị đã chọn */
+.selected-list {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 10px;
+    background: #f8f9fa;
+    border-radius: 8px;
+    margin-top: 10px;
+}
+
+.selected-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.selected-item:last-child {
+    border-bottom: none;
+}
+
+.device-qty {
+    color: #28a745;
+    font-size: 12px;
+    font-weight: 500;
+    background: #e8f5e9;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.no-selection {
+    text-align: center;
+    padding: 20px;
+    color: #6c757d;
+    font-style: italic;
+}
+
+.selected-more {
+    text-align: center;
+    padding: 10px;
+    color: #6c757d;
+    font-style: italic;
+    background: #e9ecef;
+    border-radius: 4px;
+    margin-top: 10px;
+}
+
+/* Nút đóng modal */
+.bulk-popup-modal .btn-close {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    font-size: 20px;
+    cursor: pointer;
+    padding: 5px 10px;
+    border-radius: 4px;
+}
+
+.bulk-popup-modal .btn-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
