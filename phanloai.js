@@ -30,8 +30,25 @@ class PhanLoaiXuLyManager {
             this.initializeSelect2Dropdowns();
         }, 500);
     });
+AppEvents.on('categories:updated', (data) => {
+        this.handleCategoriesUpdate(data);
+    });
 }
-
+// Thêm phương thức xử lý
+handleCategoriesUpdate(data) {
+    console.log('🔄 Updating classification categories:', data.type);
+    
+    // Refresh select2 dropdowns
+    setTimeout(() => {
+        if (data.type === 'department') {
+            this.initializeDepartmentSelect2();
+        } else if (data.type === 'staff') {
+            this.initializeStaffSelect2();
+        } else if (data.type === 'unit') {
+            this.initializeUnitSelect2();
+        }
+    }, 500);
+}
 
 // ... (các hàm toggleSelectAll, updateSelection, selectAllDevices, clearAllSelection, syncCheckboxes)
 

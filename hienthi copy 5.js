@@ -872,6 +872,106 @@ toggleGroup(groupName) {
 
     
 
+    // ========== GROUP ACTIONS ==========
+    splitEntireGroup(groupName) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        
+        if (groupDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong nhóm', 'warning');
+            return;
+        }
+        
+        this.showSplitGroupModal(groupName, groupDevices);
+    }
+
+    splitYear(groupName, year) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const yearDevices = devices.filter(d => 
+            d.ten_thiet_bi === groupName && 
+            (d.nam_san_xuat === year || (d.nam_san_xuat === null && year === 'Không xác định'))
+        );
+        
+        if (yearDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong năm này', 'warning');
+            return;
+        }
+        
+        const yearDisplay = year === 'Không xác định' ? 'năm không xác định' : `năm ${year}`;
+        this.showSplitYearModal(groupName, yearDisplay, yearDevices);
+    }
+
+    renameGroup(groupName) {
+        const newName = prompt('Nhập tên mới cho nhóm:', groupName);
+        if (newName && newName.trim() !== '' && newName !== groupName) {
+            if (!window.quanLyManager || !window.quanLyManager.allDevices) {
+                this.showNotification('Không thể cập nhật tên nhóm', 'error');
+                return;
+            }
+            
+            const devices = window.quanLyManager.allDevices.filter(d => d.ten_thiet_bi === groupName);
+            
+            devices.forEach(device => {
+                AppEvents.emit('action:updateDevice', {
+                    deviceId: device.id,
+                    updates: { ten_thiet_bi: newName.trim() }
+                });
+            });
+            
+            setTimeout(() => {
+                if (window.quanLyManager) {
+                    window.quanLyManager.loadDevices();
+                }
+            }, 500);
+        }
+    }
+
+    exportGroup(groupName) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        
+        if (groupDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong nhóm', 'warning');
+            return;
+        }
+        
+        const reportData = {
+            groupName: groupName,
+            devices: groupDevices,
+            totalDevices: groupDevices.length,
+            totalQuantity: groupDevices.reduce((sum, d) => sum + (d.so_luong || 1), 0),
+            totalValue: groupDevices.reduce((sum, d) => sum + (d.nguyen_gia || 0) * (d.so_luong || 1), 0),
+            generatedAt: new Date().toLocaleString('vi-VN')
+        };
+        
+        AppEvents.emit('export:custom', {
+            filename: `Bao-cao-nhom-${groupName.replace(/[^a-z0-9]/gi, '_')}-${new Date().toISOString().split('T')[0]}.xlsx`,
+            data: reportData
+        });
+        
+        this.showNotification(`Xuất báo cáo nhóm "${groupName}" thành công`, 'success');
+    }
+
+    exportGroupReport() {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const grouped = this.groupDevicesHierarchically(devices);
+        
+        AppEvents.emit('export:groupReport', {
+            groups: grouped,
+            totalDevices: devices.length,
+            generatedAt: new Date().toLocaleString('vi-VN')
+        });
+        
+        this.showNotification('Xuất báo cáo nhóm thành công', 'success');
+    }
 
 
 
@@ -1072,59 +1172,7 @@ renderFooter() {
     `;
 }
 
-// 6. Thêm phương thức toggle chọn tất cả thiết bị
-toggleSelectAllDevices(checked) {
-    const allDevices = this.getAllFilteredDevices();
-    
-    if (checked) {
-        // Chọn tất cả
-        allDevices.forEach(device => {
-            this.selectedDevices.add(device.id);
-        });
-    } else {
-        // Bỏ chọn tất cả
-        this.selectedDevices.clear();
-    }
-    
-    // Phát sự kiện cập nhật
-    AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
-    
-    // Hiển thị thông báo
-    this.showNotification(
-        checked ? `Đã chọn ${allDevices.length} thiết bị` : 
-                 'Đã bỏ chọn tất cả thiết bị',
-        'info'
-    );
-    
-    // Cập nhật footer
-    this.updateFooterStats(allDevices.length);
-    
-    // Nếu đang ở chế độ phân loại thủ công, hiển thị panel
-    if (checked && this.isManualClassificationMode) {
-        this.toggleManualClassificationPanel(true);
-    }
-}
 
-// 7. Thêm phương thức bật/tắt phân loại thủ công
-toggleManualClassification() {
-    this.isManualClassificationMode = !this.isManualClassificationMode;
-    
-    // Cập nhật UI
-    this.updateFooterStats(this.getAllFilteredDevices().length);
-    
-    // Hiển thị thông báo
-    this.showNotification(
-        `Chế độ phân loại thủ công đã ${this.isManualClassificationMode ? 'BẬT' : 'TẮT'}`,
-        this.isManualClassificationMode ? 'success' : 'info'
-    );
-    
-    // Nếu bật và có thiết bị được chọn, hiển thị panel
-    if (this.isManualClassificationMode && this.selectedDevices.size > 0) {
-        this.toggleManualClassificationPanel(true);
-    } else if (!this.isManualClassificationMode) {
-        this.toggleManualClassificationPanel(false);
-    }
-}
 
 // 8. Thêm phương thức hiển thị/ẩn panel phân loại thủ công
 toggleManualClassificationPanel(show) {
@@ -1167,10 +1215,24 @@ showBulkPopup(selectedDevices) {
     }
 }
 
+// 10. Sửa phương thức clearAllSelections để ẩn panel
+clearAllSelections() {
+    this.selectedDevices.clear();
+    AppEvents.emit('bulk:selectionUpdated', new Set());
+    
+    // Ẩn panel phân loại thủ công nếu đang hiển thị
+    if (this.isManualClassificationMode) {
+        this.toggleManualClassificationPanel(false);
+    }
+    
+    this.showNotification('Đã xóa tất cả lựa chọn', 'success');
+    this.refreshView();
+}
 
 // 11. Trong phương thức setup, thêm gọi renderFooter
 async setup() {
     this.renderMainLayout();
+    this.bindGlobalEvents();
     this.renderFooter(); // Thêm dòng này
     console.log('✅ HienThiManager ready');
 }
@@ -1528,8 +1590,17 @@ refreshView() {
         // Add any additional view-specific event bindings here
     }
 
+    bindGlobalEvents() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-close-modal')) {
+                this.closeAllModals();
+            }
+        });
+    }
 
-
+    closeAllModals() {
+        document.querySelectorAll('.modal').forEach(modal => modal.remove());
+    }
 
     // ========== DEVICE DETAILS & EDIT ==========
     showDeviceDetails(deviceId) {

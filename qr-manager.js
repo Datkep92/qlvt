@@ -5,10 +5,8 @@ class QRManager {
         this.moduleName = "QRManager";
         this.qrCodeReady = typeof QRCode !== 'undefined';
         
-        // Tạo debug panel cho điện thoại
-        this.createMobileDebugPanel();
+       
         
-        this.init();
     }
     
     // Tạo panel debug cho điện thoại

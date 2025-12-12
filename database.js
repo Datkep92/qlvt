@@ -256,7 +256,323 @@ async checkSerialNumberExists(serialNumber) {
             return [];
         }
     }
+// Thêm các phương thức sau vào class MedicalEquipmentDB (sau dòng async getRecentActivities)
 
+// ========== PHẦN QUẢN LÝ DANH MỤC (CHO SETTINGS.JS) ==========
+
+// 1. Phương thức lưu danh mục (cho settings.js)
+async saveCategories(type, items) {
+    console.log(`💾 Saving ${type} categories:`, items);
+    
+    try {
+        switch(type) {
+            case 'status':
+                return await this.saveStatusCategories(items);
+            case 'department':
+                return await this.saveDepartmentCategories(items);
+            case 'staff':
+                return await this.saveStaffCategories(items);
+            case 'unit':
+                return await this.saveUnitCategories(items);
+            default:
+                throw new Error(`Unknown category type: ${type}`);
+        }
+    } catch (error) {
+        console.error(`Error saving ${type} categories:`, error);
+        throw error;
+    }
+}
+
+// 2. Lưu danh mục trạng thái
+async saveStatusCategories(items) {
+    await this.ensureInitialized();
+    
+    // Lưu vào IndexedDB (tạm thời lưu vào activities store vì chưa có store riêng)
+    const transaction = this.db.transaction(['activities'], 'readwrite');
+    const store = transaction.objectStore('activities');
+    
+    // Xóa các status cũ
+    const clearRequest = store.clear();
+    
+    // Thêm status mới
+    const results = [];
+    for (const item of items) {
+        if (item.name && item.name.trim() !== '') {
+            const activity = {
+                type: 'status_category',
+                description: `Trạng thái: ${item.name}`,
+                metadata: item,
+                timestamp: new Date().toISOString(),
+                user: 'System'
+            };
+            const request = store.add(activity);
+            results.push(request);
+        }
+    }
+    
+    return Promise.all(results.map(r => this.promiseFromRequest(r)));
+}
+
+// 3. Lưu danh mục phòng ban
+async saveDepartmentCategories(items) {
+    await this.ensureInitialized();
+    
+    // Lưu vào departments store
+    const transaction = this.db.transaction(['departments'], 'readwrite');
+    const store = transaction.objectStore('departments');
+    
+    // Xóa departments cũ
+    const clearRequest = store.clear();
+    
+    // Thêm departments mới
+    const results = [];
+    for (const item of items) {
+        if (item.name && item.name.trim() !== '') {
+            const dept = {
+                ten_phong: item.name,
+                mo_ta: item.description || '',
+                created_at: new Date().toISOString()
+            };
+            const request = store.add(dept);
+            results.push(request);
+        }
+    }
+    
+    return Promise.all(results.map(r => this.promiseFromRequest(r)));
+}
+
+// 4. Lưu danh mục nhân viên
+async saveStaffCategories(items) {
+    await this.ensureInitialized();
+    
+    // Lưu vào staff store
+    const transaction = this.db.transaction(['staff'], 'readwrite');
+    const store = transaction.objectStore('staff');
+    
+    // Xóa staff cũ
+    const clearRequest = store.clear();
+    
+    // Thêm staff mới
+    const results = [];
+    for (const item of items) {
+        if (item.name && item.name.trim() !== '') {
+            const staff = {
+                ten_nhan_vien: item.name,
+                ten: item.name,
+                chuc_vu: item.position || '',
+                phong_ban: item.department || '',
+                created_at: new Date().toISOString()
+            };
+            const request = store.add(staff);
+            results.push(request);
+        }
+    }
+    
+    return Promise.all(results.map(r => this.promiseFromRequest(r)));
+}
+
+// 5. Lưu danh mục đơn vị
+async saveUnitCategories(items) {
+    await this.ensureInitialized();
+    
+    // Lưu vào units store
+    const transaction = this.db.transaction(['units'], 'readwrite');
+    const store = transaction.objectStore('units');
+    
+    // Xóa units cũ
+    const clearRequest = store.clear();
+    
+    // Thêm units mới
+    const results = [];
+    for (const item of items) {
+        if (item.name && item.name.trim() !== '') {
+            const unit = {
+                ten_don_vi: item.name,
+                mo_ta: item.description || '',
+                created_at: new Date().toISOString()
+            };
+            const request = store.add(unit);
+            results.push(request);
+        }
+    }
+    
+    return Promise.all(results.map(r => this.promiseFromRequest(r)));
+}
+
+// 6. Phương thức lấy danh mục trạng thái (cho settings.js)
+async getStatuses() {
+    try {
+        await this.ensureInitialized();
+        const transaction = this.db.transaction(['activities'], 'readonly');
+        const store = transaction.objectStore('activities');
+        const index = store.index('timestamp');
+        
+        return new Promise((resolve, reject) => {
+            const request = index.openCursor();
+            const statuses = [];
+            
+            request.onsuccess = (event) => {
+                const cursor = event.target.result;
+                if (cursor) {
+                    const activity = cursor.value;
+                    if (activity.type === 'status_category' && activity.metadata) {
+                        statuses.push({
+                            ...activity.metadata,
+                            id: cursor.key
+                        });
+                    }
+                    cursor.continue();
+                } else {
+                    // Nếu không có status trong DB, trả về mặc định
+                    if (statuses.length === 0) {
+                        resolve([
+                            { id: 1, name: 'Đang sử dụng', color: 'green', icon: '🟢', is_default: true },
+                            { id: 2, name: 'Bảo trì', color: 'orange', icon: '🟡', is_default: true },
+                            { id: 3, name: 'Hỏng', color: 'red', icon: '🔴', is_default: true },
+                            { id: 4, name: 'Ngừng sử dụng', color: 'gray', icon: '⚫', is_default: true }
+                        ]);
+                    } else {
+                        resolve(statuses);
+                    }
+                }
+            };
+            
+            request.onerror = () => reject(request.error);
+        });
+    } catch (error) {
+        console.error('Error getting statuses:', error);
+        // Trả về mặc định nếu có lỗi
+        return [
+            { id: 1, name: 'Đang sử dụng', color: 'green', icon: '🟢', is_default: true },
+            { id: 2, name: 'Bảo trì', color: 'orange', icon: '🟡', is_default: true },
+            { id: 3, name: 'Hỏng', color: 'red', icon: '🔴', is_default: true },
+            { id: 4, name: 'Ngừng sử dụng', color: 'gray', icon: '⚫', is_default: true }
+        ];
+    }
+}
+
+// 7. Phương thức helper: chuyển request thành promise
+promiseFromRequest(request) {
+    return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// 8. Phương thức xóa danh mục cũ
+async clearStore(storeName) {
+    await this.ensureInitialized();
+    const transaction = this.db.transaction([storeName], 'readwrite');
+    const store = transaction.objectStore(storeName);
+    
+    return new Promise((resolve, reject) => {
+        const request = store.clear();
+        request.onsuccess = () => resolve();
+        request.onerror = () => reject(request.error);
+    });
+}
+
+// 9. Phương thức cập nhật các trường trong setting.js
+async updateCategoriesFromSettings(type, items) {
+    console.log(`🔄 Updating ${type} from settings:`, items);
+    
+    // Lưu vào database
+    await this.saveCategories(type, items);
+    
+    // Đồng bộ với bảng devices nếu là department, staff, unit
+    if (type === 'department' || type === 'staff' || type === 'unit') {
+        await this.syncDeviceReferences(type, items);
+    }
+    
+    return true;
+}
+
+// 10. Đồng bộ tham chiếu trong devices
+async syncDeviceReferences(type, items) {
+    try {
+        const allDevices = await this.getAllDevices();
+        const fieldMap = {
+            'department': 'phong_ban',
+            'staff': 'nhan_vien_ql',
+            'unit': 'don_vi'
+        };
+        
+        const field = fieldMap[type];
+        if (!field) return;
+        
+        const validValues = items.map(item => item.name).filter(name => name && name.trim() !== '');
+        
+        for (const device of allDevices) {
+            const currentValue = device[field];
+            if (currentValue && !validValues.includes(currentValue)) {
+                // Giá trị cũ không còn hợp lệ, đặt về rỗng
+                await this.updateDevice(device.id, { [field]: '' });
+            }
+        }
+    } catch (error) {
+        console.error('Error syncing device references:', error);
+    }
+}
+
+// Thêm phương thức này vào phần initialization sample data (sau async initializeSampleData())
+async initializeStatusCategories() {
+    try {
+        const statuses = await this.getStatuses();
+        if (statuses.length === 0) {
+            // Chỉ khởi tạo mẫu nếu chưa có
+            const defaultStatuses = [
+                { id: 1, name: 'Đang sử dụng', color: 'green', icon: '🟢', is_default: true },
+                { id: 2, name: 'Bảo trì', color: 'orange', icon: '🟡', is_default: true },
+                { id: 3, name: 'Hỏng', color: 'red', icon: '🔴', is_default: true },
+                { id: 4, name: 'Ngừng sử dụng', color: 'gray', icon: '⚫', is_default: true }
+            ];
+            await this.saveStatusCategories(defaultStatuses);
+        }
+    } catch (error) {
+        console.error('Error initializing status categories:', error);
+    }
+}
+
+// Cập nhật hàm initializeSampleData để bao gồm status categories
+async initializeSampleData() {
+    try {
+        const departments = await this.getAllDepartments();
+        const units = await this.getAllUnits();
+        const staff = await this.getAllStaff();
+
+        if (departments.length === 0) {
+            const sampleDepts = ['Khoa Gây mê hồi sức', 'Khoa Phẫu thuật', 'Khoa Cấp cứu', 'Khoa Nội', 'Khoa Ngoại'];
+            for (const dept of sampleDepts) {
+                await this.addDepartment({ ten_phong: dept });
+            }
+        }
+
+        if (units.length === 0) {
+            const sampleUnits = ['Đơn vị Phẫu thuật 1', 'Đơn vị Phẫu thuật 2', 'Đơn vị Hồi sức', 'Đơn vị Cấp cứu'];
+            for (const unit of sampleUnits) {
+                await this.addUnit({ ten_don_vi: unit });
+            }
+        }
+
+        if (staff.length === 0) {
+            const sampleStaff = [
+                { ten_nhan_vien: 'Nguyễn Văn A', chuc_vu: 'Bác sĩ' },
+                { ten_nhan_vien: 'Trần Thị B', chuc_vu: 'Điều dưỡng' },
+                { ten_nhan_vien: 'Lê Văn C', chuc_vu: 'Kỹ thuật viên' },
+                { ten_nhan_vien: 'Phạm Thị D', chuc_vu: 'Quản lý thiết bị' }
+            ];
+            for (const staffMember of sampleStaff) {
+                await this.addStaff(staffMember);
+            }
+        }
+        
+        // Khởi tạo status categories
+        await this.initializeStatusCategories();
+        
+    } catch (error) {
+        console.error('Error initializing sample data:', error);
+    }
+}
     // Import/Export
     async importDevicesFromData(data) {
         const devices = this.transformExcelData(data);

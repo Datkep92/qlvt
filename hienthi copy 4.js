@@ -63,8 +63,108 @@ class HienThiManager {
             this.selectedDevices = selected || new Set();
             this.refreshView();
         });
+        AppEvents.on('app:ready', () => this.setup());
+    AppEvents.on('data:devicesUpdated', (data) => this.renderDevices(data));
+    AppEvents.on('ui:switchView', (view) => this.switchView(view));
+    AppEvents.on('ui:showDeviceDetails', (deviceId) => this.showDeviceDetails(deviceId));
+    AppEvents.on('ui:showEditDevice', (deviceId) => this.showEditDevice(deviceId));
+    AppEvents.on('ui:showDeviceHistory', (deviceId) => this.showDeviceHistory(deviceId));
+    AppEvents.on('bulk:selectionUpdated', (selected) => this.updateGroupSelections(selected));
+    AppEvents.on('ui:toggleBulkPanel', () => this.toggleBulkPanel());
+    AppEvents.on('data:refreshView', () => {
+        if (window.quanLyManager) {
+            const devices = window.quanLyManager.getCurrentPageDevices();
+            this.renderDevices(devices);
+            this.updateGlobalCheckbox();
+        }
+    });
+    
+    // THÊM EVENT MỚI: Khi categories được cập nhật trong settings
+    AppEvents.on('categories:updated', (data) => {
+        console.log('🔄 Categories updated in HienThiManager:', data.type);
+        
+        // Nếu modal edit đang mở, refresh dropdown categories
+        if (data.type === 'category') {
+            const editModal = document.querySelector('.edit-device');
+            if (editModal) {
+                setTimeout(() => {
+                    this.refreshEditModalCategories(editModal);
+                }, 300);
+            }
+            
+            const addModal = document.querySelector('.add-device-modal');
+            if (addModal) {
+                setTimeout(() => {
+                    this.refreshAddModalCategories(addModal);
+                }, 300);
+            }
+        }
+    });
     }
-
+// Thêm phương thức refresh categories trong modal edit
+refreshEditModalCategories(modal) {
+    const categorySelect = modal.querySelector('#edit-phan-loai');
+    if (!categorySelect) return;
+    
+    // Load categories mới nhất
+    if (window.settingsManager && window.settingsManager.categories && window.settingsManager.categories.category) {
+        const categories = window.settingsManager.categories.category;
+        if (categories.length > 0) {
+            const currentValue = categorySelect.value;
+            categorySelect.innerHTML = '<option value="">Chọn phân loại</option>' +
+                categories.map(cat => 
+                    `<option value="${cat.id}">${this.escapeHtml(cat.name)}</option>`
+                ).join('');
+            
+            // Khôi phục giá trị đã chọn
+            if (currentValue) {
+                categorySelect.value = currentValue;
+            }
+            
+            // Reinitialize Select2 nếu có
+            if ($(categorySelect).hasClass('select2-hidden-accessible')) {
+                $(categorySelect).select2('destroy');
+                $(categorySelect).select2({
+                    placeholder: "Chọn phân loại...",
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
+        }
+    }
+}
+// Tương tự cho add modal
+refreshAddModalCategories(modal) {
+    const categorySelect = modal.querySelector('#add-phan-loai');
+    if (!categorySelect) return;
+    
+    // Load categories mới nhất
+    if (window.settingsManager && window.settingsManager.categories && window.settingsManager.categories.category) {
+        const categories = window.settingsManager.categories.category;
+        if (categories.length > 0) {
+            const currentValue = categorySelect.value;
+            categorySelect.innerHTML = '<option value="">Chọn phân loại</option>' +
+                categories.map(cat => 
+                    `<option value="${cat.id}">${this.escapeHtml(cat.name)}</option>`
+                ).join('');
+            
+            // Khôi phục giá trị đã chọn
+            if (currentValue) {
+                categorySelect.value = currentValue;
+            }
+            
+            // Reinitialize Select2 nếu có
+            if ($(categorySelect).hasClass('select2-hidden-accessible')) {
+                $(categorySelect).select2('destroy');
+                $(categorySelect).select2({
+                    placeholder: "Chọn phân loại...",
+                    allowClear: true,
+                    width: '100%'
+                });
+            }
+        }
+    }
+}
 // Phương thức highlight thiết bị mới
 highlightNewDevice() {
     const lastSplitDevice = document.querySelector('.split-device:last-child');
@@ -872,9 +972,184 @@ toggleGroup(groupName) {
 
     
 
+    // ========== GROUP ACTIONS ==========
+    splitEntireGroup(groupName) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        
+        if (groupDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong nhóm', 'warning');
+            return;
+        }
+        
+        this.showSplitGroupModal(groupName, groupDevices);
+    }
 
+    splitYear(groupName, year) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const yearDevices = devices.filter(d => 
+            d.ten_thiet_bi === groupName && 
+            (d.nam_san_xuat === year || (d.nam_san_xuat === null && year === 'Không xác định'))
+        );
+        
+        if (yearDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong năm này', 'warning');
+            return;
+        }
+        
+        const yearDisplay = year === 'Không xác định' ? 'năm không xác định' : `năm ${year}`;
+        this.showSplitYearModal(groupName, yearDisplay, yearDevices);
+    }
 
+    renameGroup(groupName) {
+        const newName = prompt('Nhập tên mới cho nhóm:', groupName);
+        if (newName && newName.trim() !== '' && newName !== groupName) {
+            if (!window.quanLyManager || !window.quanLyManager.allDevices) {
+                this.showNotification('Không thể cập nhật tên nhóm', 'error');
+                return;
+            }
+            
+            const devices = window.quanLyManager.allDevices.filter(d => d.ten_thiet_bi === groupName);
+            
+            devices.forEach(device => {
+                AppEvents.emit('action:updateDevice', {
+                    deviceId: device.id,
+                    updates: { ten_thiet_bi: newName.trim() }
+                });
+            });
+            
+            setTimeout(() => {
+                if (window.quanLyManager) {
+                    window.quanLyManager.loadDevices();
+                }
+            }, 500);
+        }
+    }
 
+    exportGroup(groupName) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const groupDevices = devices.filter(d => d.ten_thiet_bi === groupName);
+        
+        if (groupDevices.length === 0) {
+            this.showNotification('Không có thiết bị trong nhóm', 'warning');
+            return;
+        }
+        
+        const reportData = {
+            groupName: groupName,
+            devices: groupDevices,
+            totalDevices: groupDevices.length,
+            totalQuantity: groupDevices.reduce((sum, d) => sum + (d.so_luong || 1), 0),
+            totalValue: groupDevices.reduce((sum, d) => sum + (d.nguyen_gia || 0) * (d.so_luong || 1), 0),
+            generatedAt: new Date().toLocaleString('vi-VN')
+        };
+        
+        AppEvents.emit('export:custom', {
+            filename: `Bao-cao-nhom-${groupName.replace(/[^a-z0-9]/gi, '_')}-${new Date().toISOString().split('T')[0]}.xlsx`,
+            data: reportData
+        });
+        
+        this.showNotification(`Xuất báo cáo nhóm "${groupName}" thành công`, 'success');
+    }
+
+    exportGroupReport() {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const grouped = this.groupDevicesHierarchically(devices);
+        
+        AppEvents.emit('export:groupReport', {
+            groups: grouped,
+            totalDevices: devices.length,
+            generatedAt: new Date().toLocaleString('vi-VN')
+        });
+        
+        this.showNotification('Xuất báo cáo nhóm thành công', 'success');
+    }
+
+    filterGroups(searchTerm) {
+        if (!window.quanLyManager) return;
+        
+        const devices = window.quanLyManager.getFilteredDevices(); // Sửa: Dùng filtered devices
+        const grouped = this.groupDevicesHierarchically(devices);
+        
+        const filteredGroups = Object.entries(grouped)
+            .filter(([groupName]) => 
+                groupName.toLowerCase().includes(searchTerm.toLowerCase())
+            );
+        
+        // Tạm thời chỉ hiển thị nhóm được tìm thấy
+        const container = document.querySelector('.group-list');
+        if (container) {
+            if (filteredGroups.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-icon">🔍</div>
+                        <h4>Không tìm thấy nhóm</h4>
+                        <p>Không có nhóm nào phù hợp với "${searchTerm}"</p>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = filteredGroups.map(([groupName, groupData]) => 
+                    this.renderGroupItem(groupName, groupData)
+                ).join('');
+            }
+        }
+    }
+
+    // ========== MODAL FUNCTIONS ==========
+    showSplitGroupModal(groupName, devices) {
+        const totalQuantity = devices.reduce((sum, device) => sum + (device.so_luong || 1), 0);
+        
+        const modal = this.createModal('split-group-modal');
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h3>🔄 CHIA NHÓM: ${this.escapeHtml(groupName)}</h3>
+                    <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
+                </div>
+                <div class="modal-body">
+                    <p>Tổng số lượng trong nhóm: <strong>${totalQuantity}</strong> cái</p>
+                    <p>Số thiết bị: <strong>${devices.length}</strong></p>
+                    
+                    <div class="split-options">
+                        <div class="form-group">
+                            <label for="split-method">Phương pháp chia:</label>
+                            <select id="split-method" class="form-control">
+                                <option value="year">Chia theo năm sản xuất</option>
+                                <option value="quantity">Chia theo số lượng</option>
+                                <option value="room">Chia theo phòng ban</option>
+                            </select>
+                        </div>
+                        
+                        <div id="split-options-container">
+                            </div>
+                    </div>
+                    
+                    <div class="split-preview" id="split-preview">
+                        </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
+                    <button class="btn-primary" onclick="window.hienThiManager.confirmSplitGroup('${this.escapeHtml(groupName)}')">Chia nhóm</button>
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+        
+        // Thêm sự kiện cho select method
+        const methodSelect = modal.querySelector('#split-method');
+        if (methodSelect) {
+            methodSelect.addEventListener('change', (e) => this.updateSplitOptions(e.target.value));
+        }
+    }
 
     showSplitYearModal(groupName, yearDisplay, devices) {
         const totalQuantity = devices.reduce((sum, device) => sum + (device.so_luong || 1), 0);
@@ -932,6 +1207,26 @@ toggleGroup(groupName) {
         }
     }
 
+    confirmSplitGroup(groupName) {
+        const modal = document.querySelector('.split-group-modal');
+        if (!modal) return;
+        
+        const method = modal.querySelector('#split-method').value;
+        
+        switch(method) {
+            case 'year':
+                this.splitGroupByYear(groupName);
+                break;
+            case 'quantity':
+                this.splitGroupByQuantity(groupName);
+                break;
+            case 'room':
+                this.splitGroupByRoom(groupName);
+                break;
+        }
+        
+        modal.remove();
+    }
 confirmSplitYear(groupName, yearDisplay) {
     const modal = document.querySelector('.split-year-modal');
     if (!modal) return;
@@ -984,6 +1279,32 @@ confirmSplitYear(groupName, yearDisplay) {
         }
     }
 
+    globalToggleAll(checked) {
+        if (!window.quanLyManager) {
+            console.error('quanLyManager not initialized');
+            return;
+        }
+        
+        const currentPageDevices = window.quanLyManager.getCurrentPageDevices();
+        
+        if (checked) {
+            currentPageDevices.forEach(device => {
+                this.selectedDevices.add(device.id);
+            });
+        } else {
+            currentPageDevices.forEach(device => {
+                this.selectedDevices.delete(device.id);
+            });
+        }
+        
+        AppEvents.emit('bulk:selectionUpdated', this.selectedDevices);
+        this.showNotification(
+            checked ? `Đã chọn ${currentPageDevices.length} thiết bị` : 
+                     `Đã bỏ chọn ${currentPageDevices.length} thiết bị`,
+            'info'
+        );
+        this.refreshView();
+    }
 
 
 
@@ -1167,10 +1488,24 @@ showBulkPopup(selectedDevices) {
     }
 }
 
+// 10. Sửa phương thức clearAllSelections để ẩn panel
+clearAllSelections() {
+    this.selectedDevices.clear();
+    AppEvents.emit('bulk:selectionUpdated', new Set());
+    
+    // Ẩn panel phân loại thủ công nếu đang hiển thị
+    if (this.isManualClassificationMode) {
+        this.toggleManualClassificationPanel(false);
+    }
+    
+    this.showNotification('Đã xóa tất cả lựa chọn', 'success');
+    this.refreshView();
+}
 
 // 11. Trong phương thức setup, thêm gọi renderFooter
 async setup() {
     this.renderMainLayout();
+    this.bindGlobalEvents();
     this.renderFooter(); // Thêm dòng này
     console.log('✅ HienThiManager ready');
 }
@@ -1522,14 +1857,25 @@ refreshView() {
     }
 }
 
-
+    toggleBulkPanel() {
+        AppEvents.emit('ui:toggleBulkPanel');
+    }
 
     bindViewEvents() {
         // Add any additional view-specific event bindings here
     }
 
+    bindGlobalEvents() {
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('btn-close-modal')) {
+                this.closeAllModals();
+            }
+        });
+    }
 
-
+    closeAllModals() {
+        document.querySelectorAll('.modal').forEach(modal => modal.remove());
+    }
 
     // ========== DEVICE DETAILS & EDIT ==========
     showDeviceDetails(deviceId) {
@@ -1664,138 +2010,440 @@ refreshView() {
         `;
     }
 
-    getEditDeviceHTML(device) {
-        return `
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h3>✏️ CHỈNH SỬA THIẾT BỊ</h3>
-                    <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
-                </div>
-                <div class="modal-body">
-                    <form id="edit-device-form">
-                        <div class="form-grid">
-                            <div class="form-group">
-                                <label>Tên thiết bị *</label>
-                                <input type="text" name="ten_thiet_bi" value="${this.escapeHtml(device.ten_thiet_bi)}" required>
-                            </div>
-                            <div class="form-group">
-                                <label>Model</label>
-                                <input type="text" name="model" value="${this.escapeHtml(device.model || '')}">
-                            </div>
-                            <div class="form-group">
-                                <label>Nhà sản xuất</label>
-                                <input type="text" name="nha_san_xuat" value="${this.escapeHtml(device.nha_san_xuat || '')}">
-                            </div>
-                            <div class="form-group">
-                                <label>Năm sản xuất</label>
-                                <input type="number" name="nam_san_xuat" value="${device.nam_san_xuat || ''}">
-                            </div>
-                            <div class="form-group">
-                                <label>Số lượng *</label>
-                                <input type="number" name="so_luong" value="${device.so_luong}" required min="1">
-                            </div>
-                            <div class="form-group">
-                                <label>Nguyên giá (VND)</label>
-                                <input type="number" name="nguyen_gia" value="${device.nguyen_gia || 0}" step="1000">
-                            </div>
-                            <div class="form-group">
-                                <label>Phân loại SP</label>
-                                <select name="phan_loai">
-                                    <option value="">Chọn phân loại</option>
-                                    <option value="taisan" ${device.phan_loai === 'taisan' ? 'selected' : ''}>TÀI SẢN</option>
-                                    <option value="haophi" ${device.phan_loai === 'haophi' ? 'selected' : ''}>HAO PHÍ</option>
-                                    <option value="thietbi" ${device.phan_loai === 'thietbi' ? 'selected' : ''}>THIẾT BỊ Y TẾ</option>
-                                    <option value="dungcu" ${device.phan_loai === 'dungcu' ? 'selected' : ''}>DỤNG CỤ Y TẾ</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Tình trạng</label>
-                                <select name="tinh_trang">
-                                    <option value="Đang sử dụng" ${device.tinh_trang === 'Đang sử dụng' ? 'selected' : ''}>🟢 Đang sử dụng</option>
-                                    <option value="Bảo trì" ${device.tinh_trang === 'Bảo trì' ? 'selected' : ''}>🟡 Bảo trì</option>
-                                    <option value="Hỏng" ${device.tinh_trang === 'Hỏng' ? 'selected' : ''}>🔴 Hỏng</option>
-                                    <option value="Ngừng sử dụng" ${device.tinh_trang === 'Ngừng sử dụng' ? 'selected' : ''}>⚫ Ngừng sử dụng</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Phòng ban</label>
-                                <select name="phong_ban" id="edit-phong-ban">
-                                    <option value="">Chọn phòng ban</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Nhân viên QL</label>
-                                <select name="nhan_vien_ql" id="edit-nhan-vien">
-                                    <option value="">Chọn nhân viên</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>Đơn vị tính</label>
-                                <select name="don_vi_tinh" id="edit-don-vi-tinh">
-                                    <option value="cái" ${device.don_vi_tinh === 'cái' ? 'selected' : ''}>cái</option>
-                                    <option value="bộ" ${device.don_vi_tinh === 'bộ' ? 'selected' : ''}>bộ</option>
-                                    <option value="chiếc" ${device.don_vi_tinh === 'chiếc' ? 'selected' : ''}>chiếc</option>
-                                    <option value="hộp" ${device.don_vi_tinh === 'hộp' ? 'selected' : ''}>hộp</option>
-                                </select>
-                            </div>
-                            <div class="form-group full-width">
-                                <label>Ghi chú</label>
-                                <textarea name="ghi_chu" rows="3">${this.escapeHtml(device.ghi_chu || '')}</textarea>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
-                    <button class="btn-primary" onclick="window.hienThiManager.saveDevice(${device.id})">💾 Lưu thay đổi</button>
-                </div>
-            </div>
-        `;
-    }
-
-    async loadEditModalData(modal, currentDevice) {
-        try {
-            const departments = await medicalDB.getAllDepartments();
-            const staff = await medicalDB.getAllStaff();
-            
-            // Fill departments
-            const deptSelect = modal.querySelector('#edit-phong-ban');
-            if (deptSelect) {
-                deptSelect.innerHTML = '<option value="">Chọn phòng ban</option>' +
-                    departments.map(dept => 
-                        `<option value="${dept.ten_phong}">${dept.ten_phong}</option>`
-                    ).join('');
-                
-                if (currentDevice && currentDevice.phong_ban) {
-                    deptSelect.value = currentDevice.phong_ban;
-                }
-            }
-            
-            // Fill staff
-            const staffSelect = modal.querySelector('#edit-nhan-vien');
-            if (staffSelect) {
-                staffSelect.innerHTML = '<option value="">Chọn nhân viên</option>' +
-                    staff.map(s => {
-                        const staffName = s.ten_nhan_vien || s.ten || '';
-                        const staffPosition = s.chuc_vu || '';
-                        return `<option value="${staffName}">${staffName}${staffPosition ? ` - ${staffPosition}` : ''}</option>`;
-                    }).join('');
-                
-                if (currentDevice && currentDevice.nhan_vien_ql) {
-                    staffSelect.value = currentDevice.nhan_vien_ql;
-                }
-            }
-            
-            // Set unit
-            const unitSelect = modal.querySelector('#edit-don-vi-tinh');
-            if (unitSelect && currentDevice && currentDevice.don_vi_tinh) {
-                unitSelect.value = currentDevice.don_vi_tinh;
-            }
-            
-        } catch (error) {
-            console.error('Error loading edit modal data:', error);
+    
+// Sửa phương thức getEditDeviceHTML để load categories từ database
+getEditDeviceHTML(device) {
+    // Lấy categories từ database nếu có
+    let categoriesHTML = `
+        <option value="">Chọn phân loại</option>
+        <option value="taisan" ${device.phan_loai === 'taisan' ? 'selected' : ''}>TÀI SẢN</option>
+        <option value="haophi" ${device.phan_loai === 'haophi' ? 'selected' : ''}>HAO PHÍ</option>
+        <option value="thietbi" ${device.phan_loai === 'thietbi' ? 'selected' : ''}>THIẾT BỊ Y TẾ</option>
+        <option value="dungcu" ${device.phan_loai === 'dungcu' ? 'selected' : ''}>DỤNG CỤ Y TẾ</option>
+    `;
+    
+    // Nếu có window.settingsManager, lấy categories từ đó
+    if (window.settingsManager && window.settingsManager.categories && window.settingsManager.categories.category) {
+        const categories = window.settingsManager.categories.category;
+        if (categories.length > 0) {
+            categoriesHTML = '<option value="">Chọn phân loại</option>' +
+                categories.map(cat => 
+                    `<option value="${cat.id}" ${device.phan_loai === cat.id ? 'selected' : ''}>${this.escapeHtml(cat.name)}</option>`
+                ).join('');
         }
     }
+    
+    return `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>✏️ CHỈNH SỬA THIẾT BỊ</h3>
+                <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-device-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Tên thiết bị *</label>
+                            <input type="text" name="ten_thiet_bi" value="${this.escapeHtml(device.ten_thiet_bi)}" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Model</label>
+                            <input type="text" name="model" value="${this.escapeHtml(device.model || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>Nhà sản xuất</label>
+                            <input type="text" name="nha_san_xuat" value="${this.escapeHtml(device.nha_san_xuat || '')}">
+                        </div>
+                        <div class="form-group">
+                            <label>Năm sản xuất</label>
+                            <input type="number" name="nam_san_xuat" value="${device.nam_san_xuat || ''}">
+                        </div>
+                        <div class="form-group">
+                            <label>Số lượng *</label>
+                            <input type="number" name="so_luong" value="${device.so_luong}" required min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Nguyên giá (VND)</label>
+                            <input type="number" name="nguyen_gia" value="${device.nguyen_gia || 0}" step="1000">
+                        </div>
+                        <div class="form-group">
+                            <label>Phân loại SP</label>
+                            <select name="phan_loai" id="edit-phan-loai">
+                                ${categoriesHTML}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tình trạng</label>
+                            <select name="tinh_trang">
+                                <option value="Đang sử dụng" ${device.tinh_trang === 'Đang sử dụng' ? 'selected' : ''}>🟢 Đang sử dụng</option>
+                                <option value="Bảo trì" ${device.tinh_trang === 'Bảo trì' ? 'selected' : ''}>🟡 Bảo trì</option>
+                                <option value="Hỏng" ${device.tinh_trang === 'Hỏng' ? 'selected' : ''}>🔴 Hỏng</option>
+                                <option value="Ngừng sử dụng" ${device.tinh_trang === 'Ngừng sử dụng' ? 'selected' : ''}>⚫ Ngừng sử dụng</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Phòng ban</label>
+                            <select name="phong_ban" id="edit-phong-ban">
+                                <option value="">Chọn phòng ban</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Nhân viên QL</label>
+                            <select name="nhan_vien_ql" id="edit-nhan-vien">
+                                <option value="">Chọn nhân viên</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Đơn vị tính</label>
+                            <select name="don_vi_tinh" id="edit-don-vi-tinh">
+                                <option value="cái" ${device.don_vi_tinh === 'cái' ? 'selected' : ''}>cái</option>
+                                <option value="bộ" ${device.don_vi_tinh === 'bộ' ? 'selected' : ''}>bộ</option>
+                                <option value="chiếc" ${device.don_vi_tinh === 'chiếc' ? 'selected' : ''}>chiếc</option>
+                                <option value="hộp" ${device.don_vi_tinh === 'hộp' ? 'selected' : ''}>hộp</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Ghi chú</label>
+                            <textarea name="ghi_chu" rows="3">${this.escapeHtml(device.ghi_chu || '')}</textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
+                <button class="btn-primary" onclick="window.hienThiManager.saveDevice(${device.id})">💾 Lưu thay đổi</button>
+            </div>
+        </div>
+    `;
+}
+
+// Sửa phương thức loadEditModalData để load categories từ database
+async loadEditModalData(modal, currentDevice) {
+    try {
+        // Load departments
+        const departments = await medicalDB.getAllDepartments();
+        const deptSelect = modal.querySelector('#edit-phong-ban');
+        if (deptSelect) {
+            deptSelect.innerHTML = '<option value="">Chọn phòng ban</option>' +
+                departments.map(dept => 
+                    `<option value="${dept.ten_phong}">${dept.ten_phong}</option>`
+                ).join('');
+            
+            if (currentDevice && currentDevice.phong_ban) {
+                deptSelect.value = currentDevice.phong_ban;
+            }
+        }
+        
+        // Load staff
+        const staff = await medicalDB.getAllStaff();
+        const staffSelect = modal.querySelector('#edit-nhan-vien');
+        if (staffSelect) {
+            staffSelect.innerHTML = '<option value="">Chọn nhân viên</option>' +
+                staff.map(s => {
+                    const staffName = s.ten_nhan_vien || s.ten || '';
+                    const staffPosition = s.chuc_vu || '';
+                    return `<option value="${staffName}">${staffName}${staffPosition ? ` - ${staffPosition}` : ''}</option>`;
+                }).join('');
+            
+            if (currentDevice && currentDevice.nhan_vien_ql) {
+                staffSelect.value = currentDevice.nhan_vien_ql;
+            }
+        }
+        
+        // Load categories từ database - CẢI TIẾN
+        const categorySelect = modal.querySelector('#edit-phan-loai');
+        if (categorySelect) {
+            // Thử lấy từ settings manager trước
+            if (window.settingsManager && window.settingsManager.categories && window.settingsManager.categories.category) {
+                const categories = window.settingsManager.categories.category;
+                if (categories.length > 0) {
+                    categorySelect.innerHTML = '<option value="">Chọn phân loại</option>' +
+                        categories.map(cat => 
+                            `<option value="${cat.id}" ${currentDevice.phan_loai === cat.id ? 'selected' : ''}>${this.escapeHtml(cat.name)}</option>`
+                        ).join('');
+                }
+            } else {
+                // Fallback: lấy từ database trực tiếp
+                try {
+                    const categories = await medicalDB.getCategoryCategories();
+                    if (categories && categories.length > 0) {
+                        categorySelect.innerHTML = '<option value="">Chọn phân loại</option>' +
+                            categories.map(cat => 
+                                `<option value="${cat.id}" ${currentDevice.phan_loai === cat.id ? 'selected' : ''}>${this.escapeHtml(cat.name)}</option>`
+                            ).join('');
+                    }
+                } catch (error) {
+                    console.error('Error loading categories for edit modal:', error);
+                    // Keep the default HTML
+                }
+            }
+        }
+        
+        // Set unit
+        const unitSelect = modal.querySelector('#edit-don-vi-tinh');
+        if (unitSelect && currentDevice && currentDevice.don_vi_tinh) {
+            unitSelect.value = currentDevice.don_vi_tinh;
+        }
+        
+        // Khởi tạo Select2 cho các dropdown nếu có
+        setTimeout(() => {
+            this.initializeEditModalSelect2(modal);
+        }, 100);
+        
+    } catch (error) {
+        console.error('Error loading edit modal data:', error);
+    }
+}
+
+// Sửa phương thức initializeEditModalSelect2
+initializeEditModalSelect2(modal) {
+    if (typeof $ === 'undefined' || !$.fn.select2) return;
+    
+    // Destroy any existing Select2 instances first
+    modal.querySelectorAll('.select2-hidden-accessible').forEach(el => {
+        if ($(el).data('select2')) {
+            $(el).select2('destroy');
+        }
+    });
+    
+    // Category select - KHÔNG dùng aria-hidden
+    const categorySelect = modal.querySelector('#edit-phan-loai');
+    if (categorySelect) {
+        // Remove any existing aria-hidden
+        categorySelect.removeAttribute('aria-hidden');
+        
+        $(categorySelect).select2({
+            placeholder: "Chọn phân loại...",
+            allowClear: true,
+            width: '100%',
+            minimumResultsForSearch: 3, // Chỉ hiển thị search khi có ít nhất 3 kết quả
+            dropdownParent: $(modal).find('.modal-content') // Quan trọng: giữ dropdown trong modal
+        });
+        
+        // Fix accessibility issue
+        setTimeout(() => {
+            const select2Container = categorySelect.nextElementSibling;
+            if (select2Container && select2Container.classList.contains('select2-container')) {
+                select2Container.setAttribute('role', 'combobox');
+                select2Container.setAttribute('aria-expanded', 'false');
+                select2Container.setAttribute('aria-haspopup', 'listbox');
+                
+                // Remove aria-hidden from hidden input
+                const hiddenInput = select2Container.querySelector('.select2-hidden-accessible');
+                if (hiddenInput) {
+                    hiddenInput.removeAttribute('aria-hidden');
+                    hiddenInput.setAttribute('aria-label', 'Chọn phân loại sản phẩm');
+                }
+            }
+        }, 100);
+    }
+    
+    // Department select
+    const deptSelect = modal.querySelector('#edit-phong-ban');
+    if (deptSelect) {
+        // Remove any existing aria-hidden
+        deptSelect.removeAttribute('aria-hidden');
+        
+        $(deptSelect).select2({
+            placeholder: "Chọn hoặc nhập phòng ban...",
+            allowClear: true,
+            tags: true,
+            width: '100%',
+            dropdownParent: $(modal).find('.modal-content'),
+            createTag: function(params) {
+                const term = $.trim(params.term);
+                if (term === '') return null;
+                return {
+                    id: term,
+                    text: term + ' (thêm mới)',
+                    newTag: true
+                };
+            }
+        }).on('select2:select', function(e) {
+            const data = e.params.data;
+            if (data.newTag) {
+                const deptName = data.text.replace(' (thêm mới)', '');
+                medicalDB.addDepartment({ ten_phong: deptName })
+                    .then(() => {
+                        console.log('✅ Added new department:', deptName);
+                        // Refresh dropdowns if needed
+                        AppEvents.emit('categories:updated', { type: 'department' });
+                    })
+                    .catch(err => console.error('Error adding department:', err));
+            }
+        });
+        
+        // Fix accessibility
+        setTimeout(() => {
+            const select2Container = deptSelect.nextElementSibling;
+            if (select2Container && select2Container.classList.contains('select2-container')) {
+                select2Container.setAttribute('aria-label', 'Chọn phòng ban');
+            }
+        }, 100);
+    }
+    
+    // Staff select
+    const staffSelect = modal.querySelector('#edit-nhan-vien');
+    if (staffSelect) {
+        // Remove any existing aria-hidden
+        staffSelect.removeAttribute('aria-hidden');
+        
+        $(staffSelect).select2({
+            placeholder: "Chọn hoặc nhập nhân viên...",
+            allowClear: true,
+            tags: true,
+            width: '100%',
+            dropdownParent: $(modal).find('.modal-content'),
+            createTag: function(params) {
+                const term = $.trim(params.term);
+                if (term === '') return null;
+                return {
+                    id: term,
+                    text: term + ' (thêm mới)',
+                    newTag: true
+                };
+            }
+        }).on('select2:select', function(e) {
+            const data = e.params.data;
+            if (data.newTag) {
+                const staffName = data.text.replace(' (thêm mới)', '');
+                medicalDB.addStaff({ 
+                    ten_nhan_vien: staffName,
+                    ten: staffName,
+                    chuc_vu: ''
+                })
+                .then(() => {
+                    console.log('✅ Added new staff:', staffName);
+                    AppEvents.emit('categories:updated', { type: 'staff' });
+                })
+                .catch(err => console.error('Error adding staff:', err));
+            }
+        });
+        
+        // Fix accessibility
+        setTimeout(() => {
+            const select2Container = staffSelect.nextElementSibling;
+            if (select2Container && select2Container.classList.contains('select2-container')) {
+                select2Container.setAttribute('aria-label', 'Chọn nhân viên quản lý');
+            }
+        }, 100);
+    }
+    
+    // Unit select
+    const unitSelect = modal.querySelector('#edit-don-vi-tinh');
+    if (unitSelect) {
+        $(unitSelect).select2({
+            width: '100%',
+            dropdownParent: $(modal).find('.modal-content'),
+            minimumResultsForSearch: -1 // Không hiển thị search cho dropdown nhỏ
+        });
+    }
+}
+    // Thêm phương thức getAddDeviceHTML nếu chưa có
+getAddDeviceHTML() {
+    // Lấy categories từ database
+    let categoriesHTML = `
+        <option value="">Chọn phân loại</option>
+        <option value="taisan">TÀI SẢN</option>
+        <option value="haophi">HAO PHÍ</option>
+        <option value="thietbi">THIẾT BỊ Y TẾ</option>
+        <option value="dungcu">DỤNG CỤ Y TẾ</option>
+    `;
+    
+    // Nếu có window.settingsManager, lấy categories từ đó
+    if (window.settingsManager && window.settingsManager.categories && window.settingsManager.categories.category) {
+        const categories = window.settingsManager.categories.category;
+        if (categories.length > 0) {
+            categoriesHTML = '<option value="">Chọn phân loại</option>' +
+                categories.map(cat => 
+                    `<option value="${cat.id}">${this.escapeHtml(cat.name)}</option>`
+                ).join('');
+        }
+    }
+    
+    return `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>➕ THÊM THIẾT BỊ MỚI</h3>
+                <button class="btn-close" onclick="this.closest('.modal').remove()">✕</button>
+            </div>
+            <div class="modal-body">
+                <form id="add-device-form">
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label>Tên thiết bị *</label>
+                            <input type="text" name="ten_thiet_bi" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Model</label>
+                            <input type="text" name="model">
+                        </div>
+                        <div class="form-group">
+                            <label>Nhà sản xuất</label>
+                            <input type="text" name="nha_san_xuat">
+                        </div>
+                        <div class="form-group">
+                            <label>Năm sản xuất</label>
+                            <input type="number" name="nam_san_xuat" min="1900" max="${new Date().getFullYear()}">
+                        </div>
+                        <div class="form-group">
+                            <label>Số lượng *</label>
+                            <input type="number" name="so_luong" value="1" required min="1">
+                        </div>
+                        <div class="form-group">
+                            <label>Nguyên giá (VND)</label>
+                            <input type="number" name="nguyen_gia" value="0" step="1000">
+                        </div>
+                        <div class="form-group">
+                            <label>Phân loại SP *</label>
+                            <select name="phan_loai" id="add-phan-loai" required>
+                                ${categoriesHTML}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Tình trạng *</label>
+                            <select name="tinh_trang" required>
+                                <option value="Đang sử dụng">🟢 Đang sử dụng</option>
+                                <option value="Bảo trì">🟡 Bảo trì</option>
+                                <option value="Hỏng">🔴 Hỏng</option>
+                                <option value="Ngừng sử dụng">⚫ Ngừng sử dụng</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Phòng ban</label>
+                            <select name="phong_ban" id="add-phong-ban">
+                                <option value="">Chọn phòng ban</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Nhân viên QL</label>
+                            <select name="nhan_vien_ql" id="add-nhan-vien">
+                                <option value="">Chọn nhân viên</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Đơn vị tính</label>
+                            <select name="don_vi_tinh">
+                                <option value="cái" selected>cái</option>
+                                <option value="bộ">bộ</option>
+                                <option value="chiếc">chiếc</option>
+                                <option value="hộp">hộp</option>
+                            </select>
+                        </div>
+                        <div class="form-group full-width">
+                            <label>Ghi chú</label>
+                            <textarea name="ghi_chu" rows="3"></textarea>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="this.closest('.modal').remove()">Hủy</button>
+                <button class="btn-primary" onclick="window.hienThiManager.submitAddDevice()">💾 Thêm thiết bị</button>
+            </div>
+        </div>
+    `;
+}
 
     saveDevice(deviceId) {
         const form = document.getElementById('edit-device-form');
